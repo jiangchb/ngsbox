@@ -16,9 +16,7 @@ foreach my $l1_folder (@l1_folders) {
 	### Dir Level 2
 	my @l1_path = split("/", $l1_folder);
 	my $l1_leaf = $l1_path[$#l1_path];
-
 	my @l2_folders = glob($l1_folder . "/*");
-
 
 	foreach my $l2_folder (@l2_folders) {
 		
@@ -26,20 +24,65 @@ foreach my $l1_folder (@l1_folders) {
 		### Dir Level 3
 		my @l2_path = split("/", $l2_folder);
 		my $l2_leaf = $l2_path[$#l2_path];
+		my @l3_folders = glob($l2_folder . "/*");
 
+		foreach my $l3_folder (@l3_folders) {
 
-		my @l3_files = glob($l2_folder . "/*");
-
-		foreach my $l3_file (@l3_files) {
-
-			my @l3_path = split("/", $l3_file);
+			### Dir Level 4
+			my @l3_path = split("/", $l3_folder);
 			my $l3_leaf = $l3_path[$#l3_path];
 	
 			### Only modify text files
-			if( (-T $l3_file) && ($l3_leaf =~ /\.pl/) ) {
+			if( (-T $l3_folder) && ($l3_leaf =~ /\.pl/ || $l3_leaf =~ /\.pm/) ) {
+				&modify_script($l3_folder, $l1_leaf."::".$l2_leaf."::".$l3_leaf);
+			}
 
+			### Iterate for folders
+			elsif( -d $l3_folder ) {
+				
+				my @l4_folders = glob($l3_folder . "/*");
+				
+				foreach my $l4_folder (@l4_folders) {
+				
+					### Dir Level 5
+					my @l4_path = split("/", $l4_folder);
+					my $l4_leaf = $l4_path[$#l4_path];
 
-my @mod_file = ("#! /usr/bin/perl
+					### Only modify text files
+					if( (-T $l4_folder) && ($l4_leaf =~ /\.pl/ || $l4_leaf =~ /\.pm/) ) {
+						&modify_script($l4_folder, $l1_leaf."::".$l2_leaf."::".$l3_leaf."::".$l4_leaf);
+					}
+
+					### Iterate for folders
+					elsif( -d $l4_folder ) {
+
+						my @l5_folders = glob($l4_folder . "/*");
+						
+						foreach my $l5_folder (@l5_folders) {
+
+							### Dir Level 5
+							my @l5_path = split("/", $l5_folder);
+							my $l5_leaf = $l5_path[$#l5_path];
+
+							### Only modify text files
+							if( (-T $l5_folder) && ($l5_leaf =~ /\.pl/ || $l5_leaf =~ /\.pm/) ) {
+								&modify_script($l5_folder, $l1_leaf."::".$l2_leaf."::".$l3_leaf."::".$l4_leaf."::".$l5_leaf);
+							}
+
+							# -> no deeper folder at the moment
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+sub modify_script {
+
+	my ($file, $module) = @_;
+
+	my @mod_file = ("#! /usr/bin/perl
 use strict;
 use warnings;
 
@@ -58,21 +101,27 @@ use warnings;
 #
 # Please find the GNU General Public License at <http://www.gnu.org/licenses/>.
 #
-
+#  -------------------------------------------------------------------------
+#
+#  Module: $module
+#  Purpose:
+#  In:
+#  Out:
+#
 \n");
 
-				open IN, $l3_file or die "\nError: Cannot open original perl script\n\n";
-				while( <IN> ) {
-					if( ($_ !~ /\/usr\/bin\/perl/) && ($_ !~ /use strict;/) && ($_ !~ /use warnings;/) ) {
-						push(@mod_file, $_);
-					}
-				}
-				close IN or die;
 
-				open OUT, ">$l3_file" or die "\nError: Cannot open modified perl script\n\n";
-
-				print OUT @mod_file;
-			}
+	open IN, $file or die "\nError: Cannot open original perl script\n\n";
+	while( <IN> ) {
+		if( ($_ !~ /\/usr\/bin\/perl/) && ($_ !~ /use strict;/) && ($_ !~ /use warnings;/) ) {
+			push(@mod_file, $_);
 		}
 	}
+	close IN or die;
+
+	open OUT, ">$file" or die "\nError: Cannot open modified perl script\n\n";
+
+	print OUT @mod_file;
 }
+
+
