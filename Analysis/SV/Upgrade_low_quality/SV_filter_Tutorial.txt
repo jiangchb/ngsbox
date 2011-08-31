@@ -1,0 +1,7 @@
+perl upgrade_low_quality_sv.pl 1 PE 0.1 /ebio/abt6_projects/backup/data/solexa_analysis/ATH/Genome/C24/AlignmentFolder/SV_lib1_version4_final /ebio/abt6_projects3/nobackup/data/solexa_analysis/ATH/Genome/Bur-0/AlignmentFolder/SV_lib1_version4_final /ebio/abt6_projects3/nobackup/data/solexa_analysis/ATH/Genome/Col-0-Merged/AlignmentFolder/SV_lib1_version4_final
+
+perl split_by_complexity.pl 1 PE 16 /ebio/abt6_projects/backup/data/solexa_analysis/ATH/Genome/C24/AlignmentFolder/SV_lib1_version4_final /ebio/abt6_projects3/nobackup/data/solexa_analysis/ATH/Genome/Col-0-Merged/AlignmentFolder/SV_lib1_version4_final
+
+perl assess_frequency.pl 1 PE /ebio/abt6_projects/backup/data/solexa_analysis/ATH/Genome/C24/AlignmentFolder/SV_lib1_version4_final /ebio/abt6_projects3/nobackup/data/solexa_analysis/ATH/Genome/Bur-0/AlignmentFolder/SV_lib1_version4_final /ebio/abt6_projects3/nobackup/data/solexa_analysis/ATH/Genome/Col-0-Merged/AlignmentFolder/SV_lib1_version4_final
+
+

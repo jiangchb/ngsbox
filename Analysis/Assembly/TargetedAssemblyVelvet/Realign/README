@@ -1,0 +1,19 @@
+HOW TO realign the assembled pcprs and left overs for validation and poylmorphism extraction
+
+Gather read information
+cat ../../run_pc_pr/1/tables.txt ../../run_pc_pr/2/tables.txt ../../run_pc_pr/3/tables.txt ../../run_pc_pr/4/tables.txt ../../run_pc_pr/5/tables.txt > tables.1-5.txt
+perl ~/pgsp/Assembly/Realign/parse_pc_pr.pl tables.1-5.txt > pcpr2reads.txt
+perl ~/pgsp/Assembly/Realign/parse_afg.pl ../contigs_100/velvet_assy.afg ../pc_pr_leftovers.fa  > ctg2reads.txt
+
+
+Map PCPR information on each contig
+mkdir MN
+cd MN
+perl ~/pgsp/Assembly/Realign/parse_reads_in_ctgs.pl ../ctg2reads.txt ../pcpr2reads.txt > contig_content.txt
+
+Align -- make sure you set ecotype correctly
+perl  ~/pgsp/Assembly/Realign/align_ctgs_MN.pl contig_content.txt
+
+
+
+

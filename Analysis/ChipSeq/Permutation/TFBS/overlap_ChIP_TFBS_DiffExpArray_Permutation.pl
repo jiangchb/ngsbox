@@ -1,0 +1,321 @@
+#!/usr/bin/perl
+
+# --------------------------------------------------------------------
+# Overlap permutation test for
+# 1. ChIPseq peaks, 
+# 2. Array data (differentially expressed genes) and 
+# 3. TFBS/Enhancer predictions
+#
+# Written by Stephan Ossowski, 06/20/09
+# --------------------------------------------------------------------
+
+
+use strict;
+use warnings;
+use Getopt::Long;
+use FindBin;
+use DBI;
+
+### Variables
+my $db_name;
+my $chip_table;
+my $diffexp_table;
+my $tfbs_tool_list;
+my $permnum;
+my $pref;
+my $minpeak;
+my $minlen;
+my $range;
+my $cons;
+my $pats;
+my $rep;
+my $dfd_early_no_rec_hs_up;
+my $dfd_early_no_rec_hs_down;
+my $dfd_early_gof_up;
+my $dfd_early_gof_down;
+my $dfd_late_gof_up;
+my $dfd_late_gof_down;
+
+
+### Get command line options
+my %CMD;
+GetCom();
+
+
+### Connect to DB
+my $dbh;
+&connect_to_db();
+
+
+### Open outfile for regulated gene candidates
+open GENE, ">$pref.gene_candidate.txt" or die "\n\nCannot open outfile.\n\n";
+
+
+### Initialize containers
+my %real_result = ();
+my %permutation_good = ();
+my %permutation_bad  = ();
+
+
+### Get selected prediction tools
+my $tool_selection = "";
+my @tfbs_tools = split(/,/, $tfbs_tool_list);
+foreach my $tfbs_tool (@tfbs_tools) {
+	$tool_selection .= "prediction_tool = '$tfbs_tool' || ";
+}
+$tool_selection = substr($tool_selection, 0, length($tool_selection) -3 );
+
+
+### Query chromosome length
+my $q0 = "SELECT chr, chr_alias, max_pos FROM seq_max where chr BETWEEN 3 AND 8 ORDER BY chr";
+my $sth0 = $dbh->prepare($q0);
+$sth0->execute();
+
+
+### For each chromosome
+while( my $ref0 = $sth0->fetchrow_hashref() ) {
+	my $chr       = $ref0->{'chr'};
+	my $chr_alias = $ref0->{chr_alias};
+	my $max_pos   = $ref0->{max_pos};
+	my %peak = ();
+
+	### Load ChIP peaks
+	my $q=" SELECT distinct begin, end, name
+		FROM    $chip_table
+		WHERE   chr = $chr &&
+			max_cov >= $minpeak &&
+			segment_length >= $minlen
+		ORDER BY begin";
+	my $sth = $dbh->prepare($q);
+	$sth->execute();
+	while(my $ref = $sth->fetchrow_hashref()) {
+		for(my $i = $ref->{begin} - $range; $i <= $ref->{end} + $range; $i++) {
+			$peak{$i} = $ref->{name};
+		}
+	}
+	$sth->finish();
+
+
+        ### Load predicted transcription factor binding sites
+        $q = " SELECT distinct begin, end
+                FROM    tfbs_cisA_hoxB_gene
+                WHERE   ($tool_selection) &&
+			chromosome = '$chr_alias' &&
+			type = 'dfd' &&
+			average_conservation >= $cons &&
+			repetitiveness <= $rep &&
+			( 
+			  (prediction_tool = 'hox_box' && patser_score >= $pats) ||
+			  (prediction_tool = 'cis_analyst')
+			) &&
+			fbgn IN(SELECT sequence_derived_from 
+				FROM $diffexp_table
+				WHERE   dfd_early_no_rec_hs > $dfd_early_no_rec_hs_up || 
+					dfd_early_no_rec_hs between 0.001 and $dfd_early_no_rec_hs_down || 
+					dfd_early_gof > $dfd_early_gof_up || 
+					dfd_early_gof between 0.001 and $dfd_early_gof_down || 
+					dfd_late_gof > $dfd_late_gof_up || 
+					dfd_late_gof between 0.001 and $dfd_late_gof_down)
+                ORDER by chromosome, begin
+        ";
+        $sth = $dbh->prepare($q);
+        $sth->execute();
+
+	my %tfbs = ();
+	while(my $ref = $sth->fetchrow_hashref()) {
+		my $beg = $ref->{begin};
+		my $end = $ref->{end};
+
+		### Store TFBS for permutation
+		$tfbs{$beg} = $end;
+
+		### Check real result overlap
+		my $hit = 0;
+		my $current_gene = '';
+		for(my $pos = $beg; $pos <= $end; $pos++) {
+			if(exists $peak{$pos}) { 
+				$hit = 1; 
+				$current_gene = $peak{$pos};
+			}
+		}
+		if($hit == 1) { 
+			$real_result{good}++; 
+			print GENE "$chr_alias:$beg..$end\t$current_gene\n";
+		}
+		else          { $real_result{bad}++; }
+	}
+	$sth->finish();
+
+
+	### Permute
+	for( my $permute = 1; $permute <= $permnum; $permute++) {
+		my %result = (good => 0, bad => 0);
+		my $curr_rand = int(rand($max_pos)) + 1;
+		
+		foreach my $beg (keys %tfbs) {
+			my $end = $tfbs{$beg};
+			my $rand_beg = (($beg + $curr_rand)%$max_pos) + 1;
+			my $rand_end = (($end + $curr_rand)%$max_pos) + 1;
+			my $hit = 0;
+
+			for(my $pos = $rand_beg; $pos <= $rand_end; $pos++) {
+				if(exists $peak{$pos}) { $hit = 1; }
+			}
+			if($hit == 1) { $result{good}++; }
+			else          { $result{bad}++; }
+		}
+		$permutation_good{$permute} += $result{good};
+		$permutation_bad{$permute} += $result{bad};
+	}
+}
+$sth0->finish();
+close GENE;
+
+
+
+### Print real overlap
+open RESULTS, ">$pref.real.txt" or die "Cannot open outfile $pref.real.txt\n";
+print RESULTS "$real_result{good}/$real_result{bad} = " . sprintf("%.2f", $real_result{good}/$real_result{bad}*100) . "%\n";
+close RESULTS;
+
+
+### Print permutation distribution
+open PERMOUT, ">$pref.txt" or die "Cannot open outfile $pref.txt\n";
+foreach (sort keys %permutation_good) {
+	print PERMOUT "$permutation_good{$_}\t$permutation_bad{$_}\t". sprintf("%.2f", $permutation_good{$_}/$permutation_bad{$_}*100) ."%\n";
+}
+close PERMOUT;
+
+
+### Print permutation options
+open OPTIONS, ">$pref.options.txt" or die "Cannot open outfile $pref.options.txt\n";
+print OPTIONS 	"DB\t$db_name\nChIP-Table\t$chip_table\nDiffExpArray-Table\t$diffexp_table\n" .
+		"TFBS-Table\t$tfbs_tool_list\nPermutations\t$permnum\nMin-Peak\t$minpeak\nMinSegLength\t" .
+		"$minlen\nRange\t$range\tConservation\t$cons\nPatser-Score\t$pats\nRepetitiveness\t$rep\n";
+close OPTIONS;
+
+
+### Call R plot script
+my $cmd = "R --slave --vanilla --args " . $real_result{good}
+		. " $pref.txt $pref.options.txt $pref.hist.pdf < "
+		. $FindBin::Bin . "/overlap_Permutation.R";
+print STDERR "$cmd\n";
+system($cmd);
+
+
+exit(0);
+
+
+
+### Connects to a database and returns databaseHandle
+sub connect_to_db
+{
+        my $databaseName = $db_name;
+        my $driver = "mysql";
+        my $host = "orb.eb.local";
+        my $username = "solexa";
+        my $password = "s0lexa";
+        my $dsn = "DBI:$driver:database=$databaseName;host=$host";
+        my $drh = DBI->install_driver("mysql");
+        $dbh = DBI->connect($dsn, $username, $password ) or die "Could not connect to db. Connect error: $DBI::errstr";
+}
+
+
+
+### Read command line parameters
+sub GetCom
+{
+   my @usage = ("\nUsage: $0
+
+Data:
+--db       STRING     Database name
+--chip     STRING     ChIPseq peak table
+--diffexp  STRING     Array data table: differentially expressed genes 
+--tfbs     STRING     Bindingsite/Enhancer prediction tool <hox_box | cis_analyst>. Several tools can be specified seperated by comma.
+
+Permutation:
+--permnum  INT        Number of permutation rounds, default 1000
+--pref     STRING     Prefix for all output files, default 'permutation_results'
+
+Overlap constraints:
+--range     INT        Extend overlap range, default 100
+
+ChIP constraints:
+--minpeak   INT        Minimum peak height for ChIPseq peaks filter, default 6
+--minlen    INT        Minimum peak length for ChIPseq peaks filter, default 100
+
+TFBS constraints:
+--cons      DOUBLE     Minimum average conservation of bindingsites, default 0.0
+--pats      DOUBLE     Minimum patser score (only HoxBox), default 0.0
+--rep       DOUBLE     Maximum repetitiveness ( 0.0 to 1.0, 0.0 = absolutely not repetitive ), default 1.0
+
+DiffExp Array constraints:
+--dfd_early_no_rec_hs_up     DOUBLE    default 1.5
+--dfd_early_no_rec_hs_down   DOUBLE    default 0.5
+--dfd_early_gof_up           DOUBLE    default 1.5
+--dfd_early_gof_down         DOUBLE    default 0.5
+--dfd_late_gof_up            DOUBLE    default 1.5
+--dfd_late_gof_down          DOUBLE    default 0.5
+\n");
+
+
+        die(@usage) if (@ARGV == 0);
+        GetOptions(\%CMD, "db=s", "chip=s", "diffexp=s", "tfbs=s", "permnum=s", "pref=s",
+			"minpeak=s", "minlen=s", "range=s", "cons=s", "pats=s", "rep=s", "range=s",
+                        "dfd_early_no_rec_hs_up=s", "dfd_early_gof_up=s", "dfd_late_gof_up=s",
+                        "dfd_early_no_rec_hs_down=s", "dfd_early_gof_down=s", "dfd_late_gof_down=s");
+
+
+        # Database and tables
+        die("Please specify database name.\n") unless defined($CMD{db});
+        die("Please specify ChIPseq paet table name.\n") unless defined($CMD{chip});
+        die("Please specify DiffExp array table name.\n") unless defined($CMD{diffexp});
+        die("Please specify bindingsite table name.\n") unless defined($CMD{tfbs});
+        $db_name        = $CMD{db};
+        $chip_table     = $CMD{chip};
+        $diffexp_table  = $CMD{diffexp};
+        $tfbs_tool_list = $CMD{tfbs};
+
+
+	# Permutations
+	$permnum = 1000;
+	$pref = "permutation_results";
+	if(defined $CMD{permnum}) { $permnum = $CMD{permnum}; }
+	if(defined $CMD{pref}) { $pref = $CMD{pref}; }
+
+
+	# Overlap constrainst
+	$range = 100;
+	if(defined $CMD{range}) { $range = $CMD{range}; }
+
+
+        # ChIP constraints:
+        $minpeak = 6;
+        $minlen = 100;
+        if(defined $CMD{minpeak}) { $minpeak = $CMD{minpeak}; }
+        if(defined $CMD{minlen})  { $minlen = $CMD{minlen}; }
+
+
+	# TFBS constraints:
+	$cons = 0.0;
+	$pats = 0.0;
+	$rep  = 1.0;
+	if(defined $CMD{cons}) { $cons = $CMD{cons}; }
+	if(defined $CMD{pats}) { $pats = $CMD{pats}; }
+	if(defined $CMD{rep})  { $rep  = $CMD{rep};  }
+
+
+        # DiffExp Array constraints
+        $dfd_early_no_rec_hs_up   = 1.5;
+        $dfd_early_no_rec_hs_down = 0.5;
+        $dfd_early_gof_up         = 1.5;
+        $dfd_early_gof_down       = 0.5;
+        $dfd_late_gof_up          = 1.5;
+        $dfd_late_gof_down        = 0.5;
+        if(defined $CMD{dfd_early_no_rec_hs_up})   { $dfd_early_no_rec_hs_up = $CMD{dfd_early_no_rec_hs_up}; }
+        if(defined $CMD{dfd_early_no_rec_hs_down}) { $dfd_early_no_rec_hs_down = $CMD{dfd_early_no_rec_hs_down}; }
+        if(defined $CMD{dfd_early_gof_up})         { $dfd_early_gof_up = $CMD{dfd_early_gof_up}; }
+        if(defined $CMD{dfd_early_gof_down})       { $dfd_early_gof_down = $CMD{dfd_early_gof_down}; }
+        if(defined $CMD{dfd_late_gof_up})          { $dfd_late_gof_up = $CMD{dfd_late_gof_up}; }
+        if(defined $CMD{dfd_late_gof_down})        { $dfd_late_gof_down = $CMD{dfd_late_gof_down}; }
+}

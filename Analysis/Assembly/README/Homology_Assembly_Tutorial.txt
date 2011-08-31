@@ -1,0 +1,191 @@
+Assembly steps after mapping and correct4pe (example C24):
+
+
+1. Go to C24 project folder
+mkdir AssemblyFolder
+
+
+2. Merge AlignmentFolder:
+cd AssemblyFolder
+startshore.sh mergeleftover -p ../run_18,../run_19 -m ../AlignmentFolder/map.list -d left_over
+
+
+2.1 Filter map.list for low repetitiveness:
+perl ~/pgsp/Support/Mapping/select_for_assembly.pl 5 map.list > map.low
+
+
+3. Merge leftovers: 
+(into new subfolder Assembly in AlignmentFolder, 
+left_over folder will be created inside Assembly folder):
+shore mergeleftover -p run_52,run_55,run_56,run_57,run_68 -d AlignmentFolder/Assembly
+
+
+4. Filter leftover reads
+DEPRECATED:
+perl ~/pgsp/Filter/filter_quality.pl 8 10 30 left_over_1_pair.fl
+perl ~/pgsp/Filter/filter_quality.pl 8 10 30 left_over_2_pair.fl
+perl ~/pgsp/Filter/filter_quality.pl 8 10 30 left_over_single.fl
+perl ~/pgsp/Filter/filter_quality.pl 8 10 30 left_over_missing.fl
+perl ~/pgsp/Assembly/merge_filtered_leftover.pl --pair1=left_over_1_pair.fl.filtered --pair2=left_over_2_pair.fl.filtered --single=left_over_single.fl.filtered
+shore convert -c Pair2Fastq -i left_over_1_pair.fl.filtered.merged -2 left_over_2_pair.fl.filtered.merged -o left_over_1_2_filtered.filtered.merged.fq
+
+
+5. Start assembly 
+cd AlginmentFolder/Assembly
+
+### This will wrap SHORE for all chromosome arms and assembly tools.
+### Have a look in the perl script to select the correct kmer set:
+
+perl ~/pgsp/Assembly/Callingcall_WGHA.pl AssemFolder velvet_abyss  euler  superlocas  shorebinary  minreadlength  kmerset  chrset  left_arm right_arm
+
+	# This is what the perl script runs for each chr arm:
+
+	without Superlocas:
+	nohup time shore_rur WGHA -L ../libraries.txt -i map_chr1.list -l ../left_over/left_over_missing.fl -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/TAIR8_Masked/TAIR8.v1.Masked.fa.shore -o Assembly_Left_Arm_01 -v -y -m 12000 -j 23,27,31,35,39,43,47,51 -M 50 -g 0 -C 1 -S 1 -E 13300000 -X ../../AlignmentFolder/Analysis_q01/ConsensusAnalysis/supplementary_data/oversampled.txt
+
+	Superlocas:
+	~/shore/startshore.sh WGHA -L ../libraries.txt -i map_chr1.list -l ../left_over/left_over_missing.all.fl -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/TAIR8_Masked/TAIR8.v1.Masked.fa.shore -o Assembly_Right_Arm_superlocas_01 -s -e ../left_over/left_over_missing_paired.lib1.fq,../left_over/left_over_missing_paired.lib2.fq,../left_over/left_over_single.all.fq -m 12000 -j 21 -M 30 -g 0 -C 2 -S 5500000 -E 19705359
+
+
+6. Check superlocas assembly
+
+# Check assembly and clean up 
+perl ~/pgsp/Assembly/Superlocas/check_superlocas.pl chr5/Assembly_Right_Arm_superlocas_05/BuildingSite/superlocas 0
+
+# Can be used to delete superlocas overhead files
+perl ~/pgsp/Assembly/Superlocas/check_superlocas.pl chr5/Assembly_Right_Arm_superlocas_05/BuildingSite/superlocas 1
+
+
+7. Combine contigs for AMOS (repeat for each arm and each chr):
+perl ~/pgsp/Assembly/Calling/AMOS/Prepare_AMOScmp_batches_repeats.pl /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/TAIR8_Masked/TAIR8.v1.Masked.fa.shore ~/pgsp/Assembly/Calling/AMOS/repeat_table_1kb.txt left_over/velvet_assembly/contigs.fa Scaffold_Left_Arm_01 Assembly_Left_Arm_01 Assembly_Left_Arm_superlocas_01
+
+
+8. Call AMOS:
+perl ~/pgsp/Assembly/Calling/AMOSpipeline.pl ~/shore/startshore.sh chr1/Scaffold_Left_Arm_01 chr1/Scaffold_Right_Arm_01 chr2/Scaffold_Left_Arm_01 ...
+
+or call AMOS on the cluster:
+perl /ebio/abt6/korbinian/pgsp/Assembly/Calling/AMOSpipeline_cluster.pl /ebio/abt6/korbinian/shore_git/shore/startshore.sh /ebio/abt6_projects/backup/solexa_tools/amos-2.0.8/bin/AMOScmp 100 chr1/Scaffolds_Left_Arm_01 chr1/Scaffolds_Right_Arm_01 chr2/Scaffolds_Left_Arm_01 chr2/Scaffolds_Right_Arm_01 chr3/Scaffolds_Left_Arm_01 chr3/Scaffolds_Right_Arm_01 chr4/Scaffolds_Left_Arm_01 chr4/Scaffolds_Right_Arm_01 chr5/Scaffolds_Left_Arm_01 chr5/Scaffolds_Right_Arm_01
+
+9. combine AMOS batch to chrmosome arm batches:
+for i in 1 2 3 4 5; do perl /ebio/abt6/korbinian/pgsp/Assembly/join_chr_arms.pl ${i}L 100 chr${i}/Scaffolds_Left_Arm_01/AMOScmp_batches; done
+for i in 1 2 3 4 5; do perl /ebio/abt6/korbinian/pgsp/Assembly/join_chr_arms.pl ${i}Rq 100 chr${i}/Scaffolds_Right_Arm_01/AMOScmp_batches; done
+
+-----------------------------------------------------------------------
+Targeted assembly (THA)
+-----------------------------------------------------------------------
+shore THA -L ../libraries.txt -i ../map.list -l ../left_over/left_over_filtered/left_over_missing.fl.filtered -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/TAIR8_Masked/TAIR8.v1.Masked.fa.shore -o Superlocas_Assembly_01 -v -u -y -c -m 5000 -j 21 -M 60 -g 0 -T myTargetFile &
+
+
+
+-------------------------------------------------------------------------
+Optional for WGHA:
+-------------------------------------------------------------------------
+
+1. Finishing (for only one superblock)
+cd Assembly_01/BuildingSite/Scaffolds/scaffold_1
+AMOScmp contigs -D REF=../../Input/refseq_1.fa
+
+
+2. Finishing multiple superblocks or a chromosome
+cd Assembly_01/BuildingSite
+mkdir Scaffolds
+cat Contigs/*/contigs.afg > all/contigs.afg
+cd all
+AMOScmp contigs -D REF=/ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/TAIR8_Masked/TAIR8.v1.Masked.fa.shore
+
+
+3. Converting contigs.fa to contigs.afg with additional tiling of contigs
+cd Assembly_01/BuildingSite
+mkdir Scaffolds
+cat Contigs/*/contigs.fa > Scaffolds/contigs.fa
+cd Scaffolds
+perl ~/pgsp/Support/Assembly/split_N.pl contigs.fa > contigs_noN.fa
+shore convert -c Contig2AFG -i contigs.fa -o contigs.afg -s 999999 -m 100 -a abyss,euler,velvet,SOAPdenovo
+
+
+4. Inspect AMOS bank
+hawkeye contigs.bnk
+
+
+5. Remove repetitive reads from map.list before assembly
+~/pgsp/Support/Mapping/select_unique.pl 1 map.list > map.uniq
+
+
+6. Use minimus instead of AMOScmp
+minimus contigs -D MINOVL=80
+
+
+
+-----------------------------------------------------------------------------
+Superlocas
+-----------------------------------------------------------------------------
+
+/ebio/abt6_projects/backup/solexa_tools/locas/locas//superlocas -I Superlocas_Assembly_Left_Arm_01/BuildingSite/Input/superlocas_files/superlocas_infiles.txt -O Superlocas_Assembly_Left_Arm_01/BuildingSite/Input/superlocas_files/superlocas_outfolder.txt -LO ../left_over/double_filtered/left_over_1_2_pair.fq useless_dir -F fastq -K 33 -Llo 33 -Slo 1 -Kmerg 33 -Lm 33 -Sm 0 -P pos 15 -Lt 21 -St 2 -C 100 3 -Stn 2 -Ltn 12 -DR 15 400
+
+perl ~/pgsp/Assembly/Superlocas/check_superlocas.pl . 1
+
+
+
+-----------------------------------------------------------------------------
+Left-over assembly using velvet
+-----------------------------------------------------------------------------
+
+## For MP libs only:
+perl ~/pgsp/Support/Fastq/rev_comp.pl left_over_missing_paired_1_2.lib2.fq > left_over_missing_paired_1_2.lib2.rev_comp.fq
+perl ~/pgsp/Support/Fastq/rev_comp.pl left_over_1_2.lib2.fq > left_over_1_2.lib2.rev_comp.fq
+
+## Combine fastq files:
+cat left_over_missing_paired_1_2.lib1.fq left_over_1_2.lib1.fq > left_over_assembly_all_paired.lib1.fq
+cat left_over_missing_paired_1_2.lib2.rev_comp.fq left_over_1_2.lib2.rev_comp.fq > left_over_assembly_all_paired.lib2.rev_comp.fq
+
+## Run velvet:
+
+velveth velvet_assembly 25 -fastq -short left_over_single.all.fq -shortPaired left_over_assembly_all_paired.lib1.fq -shortPaired2 left_over_assembly_all_paired.lib2.rev_comp.fq
+
+Bur-0:
+velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_coverage 100 -exp_cov auto -ins_length 187 -ins_length_sd 28 -ins_length2 3800 -ins_length2_sd 467
+Kro-0:
+velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_coverage 100 -exp_cov auto -ins_length 177 -ins_length_sd 19 -ins_length2 4700 -ins_length2_sd 602
+Col-0:
+velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_coverage 100 -exp_cov auto -ins_length 187 -ins_length_sd 23 -ins_length2 4330 -ins_length2_sd 589
+C24:
+velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_coverage 100 -exp_cov auto -ins_length 186 -ins_length_sd 32 -ins_length2 4617 -ins_length2_sd 1022
+Ler-1:
+velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_coverage 100 -exp_cov auto -ins_length 178 -ins_length_sd 22 -ins_length2 458 -ins_length2_sd 56 -ins_length3 3705 -ins_length3_sd 565
+
+
+
+-----------------------------------------------------------------------------
+Validation
+-----------------------------------------------------------------------------
+
+shore consensus -n BH -f ../../../../index/contigs.fasta.shore -o Analysis_q01 -i map.list -a ~/shore/Analysis/scoring_matrices/scoring_matrix_hom.txt -b 0.55 -v
+
+perl ~/pgsp/Support/Assembly/validate_assembly.pl 20 1000 10 10000 4 ../../../../../../contigs.fasta ../../../../../../contigs.layout supplementary_data/unseq_core.txt homozygous_snp.txt deletion.txt insertion.txt > validated_contigs.fa
+perl ~/pgsp/Support/Assembly/select_contigs.pl ...
+
+dottup -sreverse1 T test.fa ../../abyss_4/superblock_25/test.fa
+
+
+
+
+------------------------------------------------------------------------------
+Grep contig length
+------------------------------------------------------------------------------
+Abyss:
+grep ">" */abyss-contigs.fa | cut -f2 -d " " | sort -n | uniq -c
+
+Euler:
+grep ">" */matetransformed/shore_euler_filter.j.contig | cut -f2 -d " " | sort -n -k1 | uniq -c
+
+Locas:
+grep ">" */contigs.fasta | cut -f3 -d " " | cut -f2 -d ":" | sort -n | uniq -c
+
+Velvet:
+grep ">" */contigs.fa | cut -f4 -d "_" | sort -n | uniq -c
+
+SOAPdenovo:
+grep ">" */soapd.contig | cut -f3 -d " " | sort -n -k1 | uniq -c
+
+Edena:
+grep ">" edena_*/superblock_*/shore_edena_contigs.fasta | cut -f2 -d " " | cut -f2 -d "=" | sort -n | uniq -c

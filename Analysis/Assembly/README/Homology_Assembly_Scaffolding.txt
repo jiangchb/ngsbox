@@ -1,0 +1,111 @@
+###########################################################################
+# Remapping 
+###########################################################################
+
+# Set up Remapping
+perl ~/pgsp/Assembly/Remapping/create_remapping_folder.pl Remapping ../run_95 ../run_94 ../run_98
+
+# Remap
+cd Remapping
+mkdir Index
+cat ../chr1/WGHA_Folder/BuildingSite/Scaffolds/contigs.fasta > Index/contigs.fasta
+shore prep -f Index/contigs.fasta -i Index
+shore mapf -o run_95 -f Index/contigs.fasta.shore -n 10% -g 7% -c 5 -p
+
+# Preform resequencing 
+shore corr -l run_95/1 -x 200 -e 1
+shore merge -p run_95 -d AlignmentFolder
+shore conse -n remap -f ../Index/contigs.fasta.shore -o Analysis_q01 -i map.list -a /ebio/abt6_projects/backup/solexa_tools/shore/Analysis/scoring_matrices/scoring_matrix_hom.txt -b 0.51 -v -r
+
+~/shore/startshore.sh struc -N Bur-0 -i map.list -o SV_PE -t ../../ScaffoldingIndex/contigs.fa.shore.trans -C centro.txt -b Analysis_q01/ConsensusAnalysis/supplementary_data/orphan_distribution.txt -c Analysis_q01/ConsensusAnalysis/supplementary_data/unseq_core.txt -h Analysis_q01/ConsensusAnalysis/supplementary_data/unseq_cn.txt -s 200 -l 1 -T PE -f 2 -J 2
+
+###########################################################################
+# Scaffolding
+###########################################################################
+
+### Run scaffolding
+~/shore/startshore.sh scaffold -L ../../libraries.txt -I ../Index/contigs.fasta.shore -i map.list -l ../../chr1/WGHA_Folder/BuildingSite/Scaffolds/contigs.layout -c ../../chr1/WGHA_Folder/BuildingSite/Scaffolds/contigs.fasta -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr1_left_arm.fa -o Scaffolding -q -s Analysis_q01/ConsensusAnalysis/quality_variant.txt -u Analysis_q01/ConsensusAnalysis/unsequenced.txt -V SV/SV_deletion_high_quality.lib1.PE.txt -d Analysis_q01/config.log -t 10 -g 120 -r 3 -e 6000 -x 1.7 -y 0.1 -C 1
+
+shore scaffold -L remapping/AlignmentFolder/libraries.txt -i remapping/AlignmentFolder/map.list -l chr1/Assembly_Left_Arm_01/abyss_euler_velvet_min100/contigs.layout -c chr1/Assembly_Left_Arm_01/abyss_euler_velvet_min100/contigs.fasta -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr1_left_arm.fa -q -s remapping/AlignmentFolder/Analysis_01/ConsensusAnalysis/quality_variant.txt -u remapping/AlignmentFolder/Analysis_01/ConsensusAnalysis/unsequenced.txt -d remapping/AlignmentFolder/Analysis_01/config.log -I supercontig_index/C24_supercontigs.fa.shore -t 10 -g 120 -r 3 -e 6000 -x 1.7 -y 0.1 -C 1L -o Scaffolding/chr1_left_arm_scaffold_01
+
+
+#Bur-0:
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}L -L ../../AlignmentFolder/libraries.txt -I ../ScaffoldingIndex/contigs.fa.shore -i ../ScaffoldingRemapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Left_Arm_01/AMOScmp_batches/contigs_${i}L.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_left_arm.fa -q -s ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../ScaffoldingRemapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/config.log -B breaks_${i}L.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}L_breaks05; done
+
+for i in 1 2 3 4 5; do  ~/shore_git/shore/startshore.sh scaff -C ${i}R -L ../../AlignmentFolder/libraries.txt -I ../ScaffoldingIndex/contigs.fa.shore -i ../ScaffoldingRemapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Right_Arm_01/AMOScmp_batches/contigs_${i}R.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_right_arm.fa -q -s ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../ScaffoldingRemapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../ScaffoldingRemapping/AlignmentFolder/Analysis_q01/config.log -B breaks_${i}R.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}R_breaks05; done
+
+#C24:
+for i in 1 2 3 4 5; do  ~/shore_git/shore/startshore.sh scaff -C ${i}L -L ../AlignmentFolder/libraries.txt -I Index/Supercontig_Index/C24_contigs.fa.shore -i remapping/AlignmentFolder_Final/map.list -l chr${i}/Scaffold_Left_Arm_01/AMOScmp_batches/contigs_${i}L.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_left_arm.fa -q -s remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/quality_variant.txt -n remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/insertion.txt -u remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/unsequenced.txt -V remapping/AlignmentFolder_Final/SV_PE_ex5454/SV_deletion_high_quality.lib1.PE.txt -d remapping/AlignmentFolder_Final/Analysis_hom/config.log -B Scaffolding/chr${i}_left_arm/exclude.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding/chr${i}_left_arm/Scaffold_100_6_6_final; done
+
+for i in 1 2 3 4 5; do  ~/shore_git/shore/startshore.sh scaff -C ${i}R -L ../AlignmentFolder/libraries.txt -I Index/Supercontig_Index/C24_contigs.fa.shore -i remapping/AlignmentFolder_Final/map.list -l chr${i}/Scaffold_Right_Arm_01/AMOScmp_batches/contigs_${i}R.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_right_arm.fa -q -s remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/quality_variant.txt -n remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/insertion.txt -u remapping/AlignmentFolder_Final/Analysis_hom/ConsensusAnalysis/unsequenced.txt -V remapping/AlignmentFolder_Final/SV_PE_ex5454/SV_deletion_high_quality.lib1.PE.txt -d remapping/AlignmentFolder_Final/Analysis_hom/config.log -B Scaffolding/chr${i}_right_arm/exclude.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding/chr${i}_right_arm/Scaffold_100_6_6_final; done
+
+# Kro-0
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}L -L ../../AlignmentFolder/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Left_Arm_0${i}/AMOScmp_batches/contigs_${i}L.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_left_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -B breaks${i}L_02.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}L_breaks05; done
+
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}R -L ../../AlignmentFolder/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Right_Arm_0${i}/AMOScmp_batches/contigs_${i}R.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_right_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -B breaks${i}R_02.txt -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}R_breaks05; done
+
+# Col-0
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}L -L ../../AlignmentFolder_corrected/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Left_Arm_01/AMOScmp_batches/contigs_${i}L.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_left_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}L_breaks00; done
+
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}R -L ../../AlignmentFolder_corrected/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffolds_Right_Arm_01/AMOScmp_batches/contigs_${i}R.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_right_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/SV_PE/SV_deletion_high_quality.lib1.PE.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}R_breaks00; done
+
+# Ler-1
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}L -L ../../AlignmentFolder/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffold_Left_Arm_01/AMOScmp_batches/contigs_${i}L.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_left_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/All.SV_deletion.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}L_breaks00; done
+
+for i in 1 2 3 4 5; do ~/shore_git/shore/startshore.sh scaff -C ${i}R -L ../../AlignmentFolder/libraries.txt -I ../RemappingIndex/contigs.fa.shore -i ../Remapping/AlignmentFolder/map.list -l ../chr${i}/Scaffold_Right_Arm_01/AMOScmp_batches/contigs_${i}R.layout -f /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}_right_arm.fa -q -s ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/quality_variant.txt -n ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/insertion.txt -u ../Remapping/AlignmentFolder/Analysis_q01/ConsensusAnalysis/unsequenced.txt -V ../Remapping/AlignmentFolder/All.SV_deletion.txt -d ../Remapping/AlignmentFolder/Analysis_q01/config.log -t 10 -h 100 -g 50 -r 1 -e 1000 -x 1.8 -y 0.01 -c 1 -b 10 -p 6 -m 6 -o Scaffolding_chr${i}R_breaks00; done
+
+
+### Rerun mummer and bambus
+nucmer --mum -l 2000 -c 2000 -g 5 -f -b 10 /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr1_left_arm.fa nucmer_input.contig
+show-tiling -x out.delta > bambus_input.xml
+goBambus -C bambus_input.conf -c bambus_input.contig -m bambus_input.mates -x bambus_input.xml -o bambus_out
+dot -Tpdf -o bambus_out.pdf bambus_out.dot
+untangle -e bambus_out.evidence.xml -s bambus_out.out.xml -o scaffold.untangle.xml
+printScaff -e bambus_out.evidence.xml -s scaffold.untangle.xml -l bambus_out.lib -dot -detail -oo -sum -f nucmer_input.contig -merge -o scaffold
+dot -Tpdf -o scaffold.pdf scaffold.dot
+
+
+### Rerun bambus only
+# -> change parameters in bambus_input.conf
+~/pgsp/Assembly/Scaffolding/run.sh
+
+
+### Select scaffolds by minimum size
+perl ~/pgsp/Assembly/Scaffolding/select_large_contigs.pl SHORE.scaffolds.fa 1000 > SHORE.scaffolds_1k.fa
+
+
+### Check N50, max scaffold and genome coverage
+perl ~/pgsp/Support/Fasta/calc_assem_stats.pl SHORE.scaffolds.fa
+
+
+###########################################################################
+# Mummer whole genome alignment of draft sequence to reference sequence
+###########################################################################
+
+nucmer --prefix=myMum /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr1.fas SHORE.scaffolds.fa
+
+show-coords -rcl myMum.delta > myMum.coords
+
+show-tiling myMum.delta > myMum.tiling
+
+delta-filter -q myMum.delta > myMum.filter
+
+mapview -f pdf myMum.coords
+
+mummerplot myMum.filter -R /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr1.fas -Q SHORE.scaffolds.fa --filter --layout
+
+
+##########################################################################
+# Set IDs unique for the whole genome 
+###########################################################################
+
+
+for i in 1 2 3 4 5; do cd chr${i}_left_arm/Scaffold_100_6_6_final; nucmer --prefix=myMum /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}.fas SHORE.scaffolds.fa; delta-filter -q myMum.delta > myMum.filter; mummerplot myMum.filter -R /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}.fas -Q SHORE.scaffolds.fa --filter --layout -t png; cd ../../; done
+
+for i in 1 2 3 4 5; do cd chr${i}_right_arm/Scaffold_100_6_6_final; nucmer --prefix=myMum /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}.fas SHORE.scaffolds.fa; delta-filter -q myMum.delta > myMum.filter; mummerplot myMum.filter -R /ebio/abt6_analysis/nobackup/data/Shore/Plants/ATH/chromosomes/chr${i}.fas -Q SHORE.scaffolds.fa --filter --layout -t png; cd ../../; done
+
+## for each of the arms
+perl /ebio/abt6/korbinian/pgsp/Assembly/Scaffolding/finalize_scaffold_ids.pl out.gp SHORE.scaffolds.fa Chr1_left_arm 0 > SHORE.scaffolds.id.f
+
+
+
