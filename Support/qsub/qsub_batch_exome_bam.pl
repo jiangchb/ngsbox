@@ -74,8 +74,7 @@ GATK=/users/GD/tools/GATK_src/Sting/dist/GenomeAnalysisTK.jar
 SAMTOOLS=/soft/molbio/samtools-0.1.16
 ANNOVAR=/users/GD/tools/annovar/annovar_2011May06
 SHORE=/users/GD/so/sossowski/shore_CLL/shore
-PGSP=/users/GD/tools/pgsp
-
+NGSBOX=/users/GD/tools/ngsbox
 
 
 ### Add read group
@@ -164,7 +163,7 @@ java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection
 
 java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.vcf -B:variant,VCF \$OUTF/MPILEUP.snps.raw.vcf -B:mask,VCF \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"MQ < 30.0 || QUAL < 15.0 || DP < 5 || DP > $max_cov\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
 
-perl \$PGSP/Support/VCF/vcf_filter/vcf_filter.pl \$OUTF/shore/Variants/ConsensusAnalysis/snp.vcf $max_cov > \$OUTF/SHORE.snps.raw.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter.pl \$OUTF/shore/Variants/ConsensusAnalysis/snp.vcf $max_cov > \$OUTF/SHORE.snps.raw.vcf
 
 java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/SHORE.snps.filtered.vcf -B:variant,VCF \$OUTF/SHORE.snps.raw.vcf -B:mask,VCF \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"QUAL < 20.0 || DP < 5 || DP > $max_cov\" --filterName CRG
 
@@ -185,7 +184,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt -B:eval,VCF \$OUTF/SNP_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$PGSP/Support/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/SureSelect_All_Exon_G3362_plus150.bed \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/SureSelect_All_Exon_G3362_plus150.bed \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions
 grep -v \"NOTENRICHED\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.enriched.vcf
@@ -223,7 +222,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt -B:eval,VCF \$OUTF/Indel_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$PGSP/Support/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/SureSelect_All_Exon_G3362_plus150.bed \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/SureSelect_All_Exon_G3362_plus150.bed \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions 
 grep -v \"NOTENRICHED\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.enriched.vcf
