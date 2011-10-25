@@ -19,31 +19,38 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::ML::select_chromosomes.pl
+#  Module: Support::Misc::get_columns.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
-my $usage    = "$0 chr_list stop file\n\n";
-my $chr_list = shift or die "Please specify chromosome list\n\n$usage\n\n";
-my $file     = shift or die "Please specify map.list file\n\n$usage\n\n";
-my $stop     = shift;
 
-if(! defined $stop) {$stop = -1};
 
-my @chr_tmp = split(",", $chr_list);
-my %chr = ();
-foreach(@chr_tmp) { $chr{$_} = 1; }
+my $usage = "$0 file\n";
+my $file  = shift or die $usage;
 
-open FILE, $file or die "cannnot open $file\n";
+open IN, $file or die "Cannot open input file\n";
 
-while(<FILE>) {
-	my @entries = split(/\t/, $_);
-	if( exists $chr{$entries[0]} ) {
-		print $_;
+while( <IN> ) {
+	chomp;
+
+	my @e = split("\t", $_);
+
+	my $sample = "";
+	if(length($e[0]) == 1) {
+		$sample = "00" . $e[0] . "TD";
 	}
-	if($entries[0] == $stop) { last; }
+	elsif(length($e[0]) == 2) {
+		$sample = "0" . $e[0] . "TD";
+	}
+	elsif(length($e[0]) == 3) {
+		$sample = $e[0] . "TD";
+	}
+
+	print "$sample\t$e[1]\t$e[2]\t$e[3]\t$e[4]\n";
 }
+
+close IN;
 
 exit(0);

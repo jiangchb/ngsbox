@@ -155,7 +155,7 @@ mkdir \$OUTF/shore
 
 
 ### SHORE: compute coverage plot in GFF format for browsers
-\$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis -z
+\$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis
 
 
 
@@ -273,9 +273,15 @@ egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Int
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
-mkdir \$OUTF/SNP_Intersection/AnnovarUnion
+mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
+\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
+\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann \$ANNOVAR/hg19/
+
+
+### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
+mkdir \$OUTF/SNP_Intersection/AnnovarUnion
+\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
 \$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann \$ANNOVAR/hg19/
 
 

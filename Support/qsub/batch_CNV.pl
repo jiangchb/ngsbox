@@ -19,31 +19,32 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::ML::select_chromosomes.pl
+#  Module: Support::qsub::batch_db_upload.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
-my $usage    = "$0 chr_list stop file\n\n";
-my $chr_list = shift or die "Please specify chromosome list\n\n$usage\n\n";
-my $file     = shift or die "Please specify map.list file\n\n$usage\n\n";
-my $stop     = shift;
 
-if(! defined $stop) {$stop = -1};
+my $usage = "\n$0 infolder\n\n";
+my $infolder  = shift or die $usage;
 
-my @chr_tmp = split(",", $chr_list);
-my %chr = ();
-foreach(@chr_tmp) { $chr{$_} = 1; }
+my $samples = "";
 
-open FILE, $file or die "cannnot open $file\n";
+my @folders = glob($infolder . "/*");
 
-while(<FILE>) {
-	my @entries = split(/\t/, $_);
-	if( exists $chr{$entries[0]} ) {
-		print $_;
+foreach my $folder (@folders) {
+
+	my @folderpath = split("/", $folder);
+	my $folderleaf = $folderpath[$#folderpath];
+
+	if( -e "$folder/shore/map.list.gz" ) {
+		$samples .= "$folder/shore/map.list.gz,";
 	}
-	if($entries[0] == $stop) { last; }
 }
+
+chop($samples);
+
+print "shore count -k -o CNV -f /users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_standard/shore_format/SureSelect_All_Exon_G3362_plus0.bed -m $samples\n";
 
 exit(0);

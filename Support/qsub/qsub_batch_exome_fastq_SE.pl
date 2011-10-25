@@ -140,7 +140,7 @@ mkdir \$OUTF/shore
 
 
 ### SHORE: compute coverage plot in GFF format for browsers
-\$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis -z
+\$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis
 
 
 

@@ -19,31 +19,35 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::ML::select_chromosomes.pl
+#  Module: Parser::FASTQ::cut_length.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
-my $usage    = "$0 chr_list stop file\n\n";
-my $chr_list = shift or die "Please specify chromosome list\n\n$usage\n\n";
-my $file     = shift or die "Please specify map.list file\n\n$usage\n\n";
-my $stop     = shift;
 
-if(! defined $stop) {$stop = -1};
 
-my @chr_tmp = split(",", $chr_list);
-my %chr = ();
-foreach(@chr_tmp) { $chr{$_} = 1; }
+my $usage  = "$0 start end file\n";
+my $beg    = shift or die $usage;
+my $end    = shift or die $usage;
+my $file   = shift or die $usage;
 
-open FILE, $file or die "cannnot open $file\n";
+open IN, $file or die "Cannot open input file\n";
 
-while(<FILE>) {
-	my @entries = split(/\t/, $_);
-	if( exists $chr{$entries[0]} ) {
-		print $_;
-	}
-	if($entries[0] == $stop) { last; }
+while( <IN> ) {
+	my $h1  = $_;
+	my $seq = <IN>;
+	my $h2  = <IN>;
+	my $qual = <IN>;
+
+	chomp $seq;
+	chomp $qual;
+	my $print_seq  = substr( $seq,  $beg - 1, ($end - $beg + 1) );
+	my $print_qual = substr( $qual, $beg - 1, ($end - $beg + 1) );
+
+	print "$h1$print_seq\n$h2$print_qual\n";
 }
+
+close IN;
 
 exit(0);
