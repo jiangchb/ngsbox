@@ -169,15 +169,15 @@ mkdir \$OUTF/shore
 
 
 ### SHORE: Enrichment plot
-grep enriched \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f6 > \$OUTF/shore/Count_SureSelect_plus150/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f6 > \$OUTF/shore/Count_SureSelect_plus150/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f6 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f6 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_depleted.txt
+grep enriched \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_depleted.txt
+grep enriched \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_depleted.txt
 
 
 
 ### SHORE: Call SNPs and Indels
-\$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -K /users/GD/projects/genome_indices/human/hg19/hg19_kmerfreq_3_11.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
+\$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
 
 
 
