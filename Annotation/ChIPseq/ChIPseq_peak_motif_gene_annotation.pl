@@ -62,7 +62,7 @@ my %pa_ndg = ();
 
 open NDG, ">peak_annotation_pa_ndg.txt" or die "Cannot open output file";
 print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlapped_Transcripts\t".
-        "Homer_Annotation\tHomer_Nearest_PromoterID\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\tHomer_Nearest_Promoter_Symbol\t".
+        "Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\tHomer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
         "SwitchGear_TSS_FWD\tSwitchGear_TSS_Distance_FWD\tSwitchGear_TSS_REV\tSwitchGear_TSS_Distance_REV\t".
         "ENST_FWD\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
         "ENST_REV\tENSG_REV\tEntrezID_REV\tUniGene_REV\tRefSeq_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
@@ -72,7 +72,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	my $chr = $ref->{chr_pa};
 	my $beg = $ref->{start_pa} - 1;
 	my $end = $ref->{end_pa} - 1;
-	my $peak_middle = floor( ($beg + $end) / 2 );
+	my $peak_middle = ceil( ($beg + $end) / 2 );
 	
 	my $enst_down_fwd = $ref->{Downstream_FW_Gene};
 	my $enst_down_rev = $ref->{Downstream_REV_Gene};
@@ -116,37 +116,42 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	### Get nearest PromoterID from homer hg19 (from all up/down, fwd/rev)
 	my $promoter_name = "NA";
 	my $promoter_id = "NA";
-	my $promoter_symbol = "NA";
 	my $promoter_ensg = "NA";
 	my $promoter_dist = 999999999;
 
 
-	my $promoter_up = $dbh->selectall_hashref("SELECT * FROM ann_homer_basic WHERE type = 'P' AND chr = 'chr$chr' AND start >= $peak_middle ORDER by start ASC limit 1", "anno");
+	my $promoter_up = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 >= $peak_middle ORDER by start ASC limit 1", "refseq");
 	foreach my $id (keys %$promoter_up) {
-		my $promoter_middle = floor( ($promoter_up->{$id}->{start} + $promoter_up->{$id}->{end}) / 2 );
-		my $current_dist = abs($promoter_middle - $peak_middle);
-		if($current_dist < $promoter_dist) {
+		my $promoter_middle = $promoter_up->{$id}->{start} + 2001;
+		my $current_dist = $promoter_middle - $peak_middle;
+		if($promoter_up->{$id}->{strand} eq "0") {
+			$current_dist = $peak_middle - $promoter_middle;
+		}
+		if(abs($current_dist) < abs($promoter_dist)) {
 			$promoter_dist = $current_dist;
-			$promoter_name = $promoter_up->{$id}->{anno};
+			$promoter_name = $promoter_up->{$id}->{refseq};
 		}
 	}
-	my $promoter_down = $dbh->selectall_hashref("SELECT * FROM ann_homer_basic WHERE type = 'P' AND chr = 'chr$chr' AND start <= $peak_middle ORDER by start DESC limit 1", "anno");
+	my $promoter_down = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 <= $peak_middle ORDER by start DESC limit 1", "refseq");
 	foreach my $id (keys %$promoter_down) {
-		my $promoter_middle = floor( ($promoter_down->{$id}->{start} + $promoter_down->{$id}->{end}) / 2 );
-		my $current_dist = abs($promoter_middle - $peak_middle);
-		if($current_dist < $promoter_dist) {
+		my $promoter_middle = $promoter_down->{$id}->{start} + 2001;
+		my $current_dist = $promoter_middle - $peak_middle;
+		if($promoter_down->{$id}->{strand} eq "0") {
+			$current_dist = $peak_middle - $promoter_middle;
+		}
+		if(abs($current_dist) < abs($promoter_dist)) {
 			$promoter_dist = $current_dist;
-			$promoter_name = $promoter_down->{$id}->{anno};
+			$promoter_name = $promoter_down->{$id}->{refseq};
 		}
 	}
-	$promoter_name =~ s/promoter-TSS \(//g;
-	$promoter_name =~ s/\)//g;
+	#$promoter_name =~ s/promoter-TSS \(//g;
+	#$promoter_name =~ s/\)//g;
 
-	my $translate = $dbh->selectall_hashref("SELECT * FROM ann_enst2geneID where refseq = '$promoter_name' limit 1", "enst_name");
+	my $translate = $dbh->selectall_hashref("SELECT * FROM ann_homer_gene where refseq = '$promoter_name' || symbol = '$promoter_name' limit 1", "symbol");
 	foreach my $id (keys %$translate) {
 		$promoter_id = $translate->{$id}->{GeneID};
-		$promoter_symbol = $translate->{$id}->{symbol};
 		$promoter_ensg = $translate->{$id}->{ensg_name};
+		$promoter_name = $translate->{$id}->{refseq};
 	}
 	
 
@@ -174,7 +179,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 		"chr$chr\t$beg\t$end\t".
 		$peak{"$chr#$beg#$end"}->{region} ."\t". $peak{"$chr#$beg#$end"}->{peakscore} ."\t".
 		$ref->{overlaped_transcripts} . "\t".
-		"$homer_string\t$promoter_name\t$promoter_dist\t$promoter_id\t$promoter_ensg\t$promoter_symbol\t";
+		"$homer_string\t$promoter_dist\t$promoter_name\t$promoter_id\t$promoter_ensg\t";
 
 	### Print SwitchGear TSS annotation
 	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
