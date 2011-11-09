@@ -37,6 +37,36 @@ my $dbh = '';
 
 ### Read gene annotation
 my $ann_enst2geneID = $dbh->selectall_hashref('SELECT * FROM ann_enst2geneID', 'enst_name');
+#foreach my $id (keys %$ann_enst2geneID) {
+#	print "Value of ID $id is $ann_enst2geneID->{$id}->{ensg_name}\n";
+#}
+
+
+
+### Read TSS annotation
+#my $ann_switchGearTSS_fwd = $dbh->selectall_hashref('SELECT * FROM ann_switchGearTSS WHERE strand = "+"', 'name');
+#my $ann_switchGearTSS_rev = $dbh->selectall_hashref('SELECT * FROM ann_switchGearTSS WHERE strand = "-"', 'name');
+#foreach my $id (keys %$ann_switchGearTSS_fwd) {
+#	print "Value of ID $id is $ann_switchGearTSS_fwd->{$id}->{strand}\n";
+#}
+
+
+
+### Read fimo motif prediction
+#my $q= "SELECT * from fimo_gw";
+#my $sth = $dbh->prepare($q);
+#$sth->execute();
+#my %fimo = ();
+#while (my $ref = $sth->fetchrow_hashref()) {
+#	my $chr = $ref->{chr_fimo};
+#	my $beg = $ref->{start_fimo};
+#	my $end = $ref->{stop_fimo};
+#	$fimo{"$chr#$beg#$end"} = \%$ref;
+#	#print $fimo{"$chr#$beg#$end"}->{seq_fimo} . "\n";
+#}
+#foreach my $id (keys %fimo) {
+#	print "$id\t" . $fimo{$id}->{seq_fimo} . "\n";
+#}
 
 
 
@@ -53,15 +83,13 @@ while (my $ref = $sth->fetchrow_hashref()) {
 }
 
 
-
 ### Peak annotation (using PeakAnalyzer NDG, Homer and UCSC hg19)
 $q= "SELECT * from pa_ndg";
 $sth = $dbh->prepare($q);
 $sth->execute();
 my %pa_ndg = ();
 
-open NDG, ">peak_annotation_pa_ndg.txt" or die "Cannot open output file";
-print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlapped_Transcripts\t".
+print   "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlapped_Transcripts\t".
         "Homer_Annotation\tHomer_Nearest_PromoterID\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\tHomer_Nearest_Promoter_Symbol\t".
         "SwitchGear_TSS_FWD\tSwitchGear_TSS_Distance_FWD\tSwitchGear_TSS_REV\tSwitchGear_TSS_Distance_REV\t".
         "ENST_FWD\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
@@ -170,41 +198,43 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 
 	### Print peak features
-	print NDG $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
+	print   $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
 		"chr$chr\t$beg\t$end\t".
 		$peak{"$chr#$beg#$end"}->{region} ."\t". $peak{"$chr#$beg#$end"}->{peakscore} ."\t".
 		$ref->{overlaped_transcripts} . "\t".
 		"$homer_string\t$promoter_name\t$promoter_dist\t$promoter_id\t$promoter_ensg\t$promoter_symbol\t";
 
 	### Print SwitchGear TSS annotation
-	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
+	print	"$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
 
 	### Print fwd gene annotation
 	if(exists $ann_enst2geneID->{$enst_down_fwd}->{ensg_name}) {
-		print NDG $enst_down_fwd ."\t". $ann_enst2geneID->{$enst_down_fwd}->{ensg_name} ."\t".
+		print	$enst_down_fwd ."\t". $ann_enst2geneID->{$enst_down_fwd}->{ensg_name} ."\t".
 			$ann_enst2geneID->{$enst_down_fwd}->{GeneID} ."\t". $ann_enst2geneID->{$enst_down_fwd}->{Unigene} ."\t".
 			$ann_enst2geneID->{$enst_down_fwd}->{refseq} ."\t". $ann_enst2geneID->{$enst_down_fwd}->{symbol} ."\t".
 			$ann_enst2geneID->{$enst_down_fwd}->{name_desc} ."\t". $ann_enst2geneID->{$enst_down_fwd}->{description} ."\t";
 	}
 	else {
-		print NDG $enst_down_fwd ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print	$enst_down_fwd ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print rev gene annotation
 	if(exists $ann_enst2geneID->{$enst_down_rev}->{ensg_name}) {
-		print NDG $enst_down_rev ."\t". $ann_enst2geneID->{$enst_down_rev}->{ensg_name} ."\t".
+		print	$enst_down_rev ."\t". $ann_enst2geneID->{$enst_down_rev}->{ensg_name} ."\t".
 			$ann_enst2geneID->{$enst_down_rev}->{GeneID} ."\t". $ann_enst2geneID->{$enst_down_rev}->{Unigene} ."\t".
 			$ann_enst2geneID->{$enst_down_rev}->{refseq} ."\t". $ann_enst2geneID->{$enst_down_rev}->{symbol} ."\t".
 			$ann_enst2geneID->{$enst_down_rev}->{name_desc} ."\t". $ann_enst2geneID->{$enst_down_rev}->{description} ."\t";
 	}
 	else {
-		print NDG $enst_down_rev ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print	$enst_down_rev ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print motif information
-	print NDG "$TFBS_string\n";
+	print "$TFBS_string\n";
 
 }
+
+exit(0);
 
 
 
@@ -213,19 +243,18 @@ $q= "SELECT * from pa_overlap";
 $sth = $dbh->prepare($q);
 $sth->execute();
 my %pa_ovl = ();
-open OVL, ">peak_annotation_pa_ovl.txt" or die "Cannot open output file";
 while (my $ref = $sth->fetchrow_hashref()) {
 
 	my $chr = $ref->{chr_pa};
-	my $beg = $ref->{start_pa} - 1;
-	my $end = $ref->{end_pa} - 1;
+	my $beg = $ref->{start_pa};
+	my $end = $ref->{end_pa};
 	# $pa_ovl{"$chr#$beg#$end"} = \%$ref;
 	
 	my $enst = $ref->{overlaped_transcripts};
 
 	if(exists $ann_enst2geneID->{$enst}->{ensg_name}) {
 	
-		print OVL $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t". 
+		print 	$ref->{venn_set} ."\t". $ref->{venn_subset} ."\t". 
 			$ref->{chr_pa} ."\t". $ref->{start_pa} ."\t". $ref->{end_pa} ."\t".
 			$peak{"$chr#$beg#$end"}->{region} ."\t". $peak{"$chr#$beg#$end"}->{peakscore} ."\t".
 			$enst ."\t". $ann_enst2geneID->{$enst}->{ensg_name} ."\t".
@@ -235,7 +264,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ref->{Overlap_Begin} ."\t". $ref->{Overlap_Center} ."\t".$ref->{Overlap_End} ."\n";
 	}
 	else {
-		print OVL $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
+		print   $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
 			$ref->{chr_pa} ."\t". $ref->{start_pa} ."\t". $ref->{end_pa} ."\t".
 			$ref->{overlaped_transcripts} ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t".
 			$ref->{Overlap_Begin} ."\t". $ref->{Overlap_Center} ."\t".$ref->{Overlap_End} ."\n";
