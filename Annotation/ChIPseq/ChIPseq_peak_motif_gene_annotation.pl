@@ -157,20 +157,26 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	### Get nearest TSS from SwitchGear (fwd and rev)
 	my $TSS_name_fwd = "";
-	my $TSS_dist_fwd = -1;
+	my $TSS_dist_fwd = 999999999;
 	my $TSS_name_rev = "";
-	my $TSS_dist_rev = -1;
+	my $TSS_dist_rev = 999999999;
 
-	my $ann_switchGearTSS_fwd = $dbh->selectall_hashref("SELECT * FROM ann_switchGearTSS WHERE strand = '+' AND chrom = '$chr' AND chromStart >= $beg ORDER by chromStart ASC limit 1", "name");
+	my $ann_switchGearTSS_fwd = $dbh->selectall_hashref("SELECT * FROM ann_switchGearTSS WHERE strand = '+' AND chrom = '$chr' AND chromStart >= $beg ORDER by chromStart ASC limit 5", "name");
 	foreach my $id (keys %$ann_switchGearTSS_fwd) {
-		$TSS_name_fwd = $ann_switchGearTSS_fwd->{$id}->{name};
-		$TSS_dist_fwd = $ann_switchGearTSS_fwd->{$id}->{chromStart} - $peak_middle; 
+		my $current_dist = $ann_switchGearTSS_fwd->{$id}->{chromStart} - $peak_middle;
+		if( abs($current_dist) < abs($TSS_dist_fwd) ) {
+			$TSS_name_fwd = $ann_switchGearTSS_fwd->{$id}->{name};
+			$TSS_dist_fwd = $current_dist;
+		}
 	}
 
-	my $ann_switchGearTSS_rev = $dbh->selectall_hashref("SELECT * FROM ann_switchGearTSS WHERE strand = '-' AND chrom = '$chr' AND chromStart <= $end ORDER by chromStart DESC limit 1", "name");
-	foreach my $id (keys %$ann_switchGearTSS_rev) { 
-		$TSS_name_rev = $ann_switchGearTSS_rev->{$id}->{name};
-		$TSS_dist_rev = $peak_middle - $ann_switchGearTSS_rev->{$id}->{chromStart}; 
+	my $ann_switchGearTSS_rev = $dbh->selectall_hashref("SELECT * FROM ann_switchGearTSS WHERE strand = '-' AND chrom = '$chr' AND chromStart <= $end ORDER by chromStart DESC limit 5", "name");
+	foreach my $id (keys %$ann_switchGearTSS_rev) {
+		my $current_dist = $peak_middle - $ann_switchGearTSS_rev->{$id}->{chromStart};
+		if( abs($current_dist) < abs($TSS_dist_rev) ) {
+			$TSS_name_rev = $ann_switchGearTSS_rev->{$id}->{name};
+			$TSS_dist_rev = $current_dist;
+		}
 	}
 
 
