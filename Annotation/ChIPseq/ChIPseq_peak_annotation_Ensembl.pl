@@ -45,11 +45,19 @@ my $ann_UCSC_ensemblToGeneName = $dbh->selectall_hashref('SELECT * FROM ann_UCSC
 
 ### Print peak annotation header
 open NDG, ">peak_annotation_ensembl.txt" or die "Cannot open output file";
-print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlapped_Transcripts\t".
-	"Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\tHomer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
+print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlap_Ensembl\t".
+	# Homer style
+	"Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\t".
+	"Homer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
+
+	# SwitchGearTSS
 	"SwitchGear_TSS_FWD\tSwitchGear_TSS_Distance_FWD\tSwitchGear_TSS_REV\tSwitchGear_TSS_Distance_REV\t".
-	"ENST_FWD\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
-	"ENST_REV\tENSG_REV\tEntrezID_REV\tUniGene_REV\tRefSeq_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
+
+	# Ensembl
+	"ENST_FWD\tDistance2txStart\tDistance2cdsStart\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
+	"ENST_REV\tDistance2txStart\tDistance2cdsStart\tENSG_REV\tEntrezID_REV\tUniGene_REV\tRefSeq_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
+	
+	# Fimo motif
 	"Motifs(sequence,distance_from_peak,fimo_score)\n";
 
 
@@ -69,17 +77,22 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	### Get Ensembl fwd downstream gene
 	my $enst_fwd = "NA";
-	my $ann_UCSC_Ensembl_fwd = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '+' AND chrom = 'chr$chr' AND txStart >= $peak_middle ORDER by txStart ASC limit 1", "name");
+	my $ann_UCSC_Ensembl_fwd = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '+' AND chrom = 'chr$chr' AND txStart >= $beg ORDER by txStart ASC limit 1", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_fwd) {
 		$enst_fwd = $ann_UCSC_Ensembl_fwd->{$id}->{name};
 	}
+	my $enst_fwd_dist_txStart  = $ann_UCSC_Ensembl_fwd->{$enst_fwd}->{txStart} - $peak_middle;
+	my $enst_fwd_dist_cdsStart = $ann_UCSC_Ensembl_fwd->{$enst_fwd}->{cdsStart} - $peak_middle;
+
 
 	### Get Ensembl rev downstream gene
 	my $enst_rev = "NA";
-	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txStart <= $peak_middle ORDER by txStart DESC limit 1", "name");
+	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txStart <= $end ORDER by txStart DESC limit 1", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_rev) {
 		$enst_rev = $ann_UCSC_Ensembl_rev->{$id}->{name};
 	}
+	my $enst_rev_dist_txStart  = $peak_middle - $ann_UCSC_Ensembl_rev->{$enst_rev}->{txEnd};
+	my $enst_rev_dist_cdsStart = $peak_middle - $ann_UCSC_Ensembl_rev->{$enst_rev}->{cdsEnd};
 
 	
 	### Get Ensembl overlapping genes
@@ -88,7 +101,6 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	my $ann_UCSC_Ensembl_ovl = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE chrom = 'chr$chr' AND $peak_middle between txStart and txEnd", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_ovl) {
 		$enst_ovl_hash{$ann_UCSC_Ensembl_ovl->{$id}->{name2}} = 1;
-		#$enst_ovl .= $ann_UCSC_Ensembl_ovl->{$id}->{name} . ",";
 	}
 	foreach my $ensg (sort keys %enst_ovl_hash) {
 		$enst_ovl .= "$ensg,";
@@ -215,7 +227,8 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
 
 	### Print fwd gene annotation
-	print NDG $enst_fwd ."\t". $ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
+	print NDG "$enst_fwd\t$enst_fwd_dist_txStart\t$enst_fwd_dist_cdsStart\t". 
+			$ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
 	if(exists $ann_enst2geneID->{$enst_fwd}->{ensg_name}) {
 		print NDG $ann_enst2geneID->{$enst_fwd}->{GeneID} ."\t". $ann_enst2geneID->{$enst_fwd}->{Unigene} ."\t".
 			$ann_enst2geneID->{$enst_fwd}->{refseq} ."\t". $ann_enst2geneID->{$enst_fwd}->{symbol} ."\t".
@@ -226,7 +239,8 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	}
 
 	### Print rev gene annotation
-	print NDG $enst_rev ."\t". $ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
+	print NDG "$enst_rev\t$enst_rev_dist_txStart\t$enst_rev_dist_cdsStart\t". 
+			$ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
 	if(exists $ann_enst2geneID->{$enst_rev}->{ensg_name}) {
 		print NDG $ann_enst2geneID->{$enst_rev}->{GeneID} ."\t". $ann_enst2geneID->{$enst_rev}->{Unigene} ."\t".
 			$ann_enst2geneID->{$enst_rev}->{refseq} ."\t". $ann_enst2geneID->{$enst_rev}->{symbol} ."\t".

@@ -36,65 +36,75 @@ my $dbh = '';
 
 
 ### Read gene annotation translation
-my $ann_enst2geneID            = $dbh->selectall_hashref('SELECT * FROM ann_enst2geneID', 'enst_name');
-my $ann_UCSC_ensemblToGeneName = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_ensemblToGeneName', 'ENST');
-#my $ann_UCSC_knownToEnsembl    = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_knownToEnsembl', 'known');
-#my $ann_UCSC_knownToRefSeq     = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_knownToRefSeq', 'known');
+my $ann_enst2geneID            = $dbh->selectall_hashref('SELECT * FROM ann_enst2geneID limit 1', 'refseq');
+#my $ann_UCSC_ensemblToGeneName = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_ensemblToGeneName', 'ENST');
 
 
 
 ### Print peak annotation header
-open NDG, ">motif_annotation_ensembl.txt" or die "Cannot open output file";
-print NDG "Chr\tMotif_Start\tMotif_End\tOverlap_Ensembl\t".
-	"Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\tHomer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
+open NDG, ">peak_annotation_refseq.txt" or die "Cannot open output file";
+print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlap_RefSeq\t".
+	# Homer style
+	"Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\t".
+	"Homer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
+
+	# SwitchGearTSS
 	"SwitchGear_TSS_FWD\tSwitchGear_TSS_Distance_FWD\tSwitchGear_TSS_REV\tSwitchGear_TSS_Distance_REV\t".
-	"ENST_FWD\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
-	"ENST_REV\tENSG_REV\tEntrezID_REV\tUniGene_REV\tRefSeq_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
+
+	# RefSeqGenes
+	"RefSeqGenes_FWD\tDistance2txStart\tDistance2cdsStart\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
+	"RefSeqGenes_REV\tDistance2txStart\tDistance2cdsStart\tENSG_REV\tEntrezID_REV\tUniGene_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
+	
+	# Fimo motif
 	"Motifs(sequence,distance_from_peak,fimo_score)\n";
 
 
 ### Get peaks
-my $q= "SELECT * from fimo_gw WHERE score_fimo >= 6";
+my $q= "SELECT * from peak";
 my $sth = $dbh->prepare($q);
 $sth->execute();
 my %peak = ();
 
 while (my $ref = $sth->fetchrow_hashref()) {
-	my $chr = $ref->{chr_fimo};
-	my $beg = $ref->{start_fimo} - 1;
-	my $end = $ref->{stop_fimo} - 1;
-	my $motif_middle = ceil( ($beg + $end) / 2 );
+	my $chr = $ref->{chr};
+	my $beg = $ref->{start} - 1;
+	my $end = $ref->{end} - 1;
+	my $peak_middle = ceil( ($beg + $end) / 2 );
 
 
 
 	### Get Ensembl fwd downstream gene
-	my $enst_fwd = "NA";
-	my $ann_UCSC_Ensembl_fwd = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '+' AND chrom = 'chr$chr' AND txStart >= $motif_middle ORDER by txStart ASC limit 1", "name");
-	foreach my $id (keys %$ann_UCSC_Ensembl_fwd) {
-		$enst_fwd = $ann_UCSC_Ensembl_fwd->{$id}->{name};
+	my $refseq_fwd = "NA";
+	my $ann_UCSC_RefSeqGenes_fwd = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '+' AND chrom = 'chr$chr' AND txStart >= $beg ORDER by txStart ASC limit 1", "name");
+	foreach my $id (keys %$ann_UCSC_RefSeqGenes_fwd) {
+		$refseq_fwd = $ann_UCSC_RefSeqGenes_fwd->{$id}->{name};
 	}
+	my $refseq_fwd_dist_txStart  = $ann_UCSC_RefSeqGenes_fwd->{$refseq_fwd}->{txStart} - $peak_middle;
+	my $refseq_fwd_dist_cdsStart = $ann_UCSC_RefSeqGenes_fwd->{$refseq_fwd}->{cdsStart} - $peak_middle;
+
 
 	### Get Ensembl rev downstream gene
-	my $enst_rev = "NA";
-	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txStart <= $motif_middle ORDER by txStart DESC limit 1", "name");
-	foreach my $id (keys %$ann_UCSC_Ensembl_rev) {
-		$enst_rev = $ann_UCSC_Ensembl_rev->{$id}->{name};
+	my $refseq_rev = "NA";
+	my $ann_UCSC_RefSeqGenes_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txStart <= $end ORDER by txStart DESC limit 1", "name");
+	foreach my $id (keys %$ann_UCSC_RefSeqGenes_rev) {
+		$refseq_rev = $ann_UCSC_RefSeqGenes_rev->{$id}->{name};
 	}
+	my $refseq_rev_dist_txStart  = $peak_middle - $ann_UCSC_RefSeqGenes_rev->{$refseq_rev}->{txEnd};
+	my $refseq_rev_dist_cdsStart = $peak_middle - $ann_UCSC_RefSeqGenes_rev->{$refseq_rev}->{cdsEnd};
 
 	
 	### Get Ensembl overlapping genes
-	my $enst_ovl = "";
-	my %enst_ovl_hash = ();
-	my $ann_UCSC_Ensembl_ovl = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE chrom = 'chr$chr' AND $motif_middle BETWEEN txStart and txEnd", "name");
+	my $refseq_ovl = "";
+	my %refseq_ovl_hash = ();
+	my $ann_UCSC_Ensembl_ovl = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_RefSeqGenes WHERE chrom = 'chr$chr' AND $peak_middle between txStart and txEnd", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_ovl) {
-		$enst_ovl_hash{$ann_UCSC_Ensembl_ovl->{$id}->{name2}} = 1;
-		#$enst_ovl .= $ann_UCSC_Ensembl_ovl->{$id}->{name} . ",";
+		$refseq_ovl_hash{$ann_UCSC_Ensembl_ovl->{$id}->{name2}} = 1;
 	}
-	foreach my $ensg (sort keys %enst_ovl_hash) {
-		$enst_ovl .= "$ensg,";
+	foreach my $ensg (sort keys %refseq_ovl_hash) {
+		$refseq_ovl .= "$ensg,";
 	}
-	chop($enst_ovl);
-	if($enst_ovl eq "") { $enst_ovl = "NA"; }
+	chop($refseq_ovl);
+	if($refseq_ovl eq "") { $refseq_ovl = "NA"; }
 
 
 	### Get fimo motif
@@ -104,9 +114,9 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	my %fimo = ();
 	my $TFBS_string = "";
 	while (my $ref = $fimo_sth->fetchrow_hashref()) {
-		my $motif_middle_dist = $motif_middle - $ref->{start_fimo};
+		my $peak_middle_dist = $peak_middle - $ref->{start_fimo};
 
-		$TFBS_string .= "(". $ref->{seq_fimo} .",$motif_middle_dist,". $ref->{score_fimo}. "),";
+		$TFBS_string .= "(". $ref->{seq_fimo} .",$peak_middle_dist,". $ref->{score_fimo}. "),";
 	}
 	chop($TFBS_string);
 	if($TFBS_string eq "") { $TFBS_string = "NA"; }
@@ -140,24 +150,24 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	my $promoter_dist = 999999999;
 
 
-	my $promoter_up = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 >= $motif_middle ORDER by start ASC limit 1", "refseq");
+	my $promoter_up = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 >= $peak_middle ORDER by start ASC limit 1", "refseq");
 	foreach my $id (keys %$promoter_up) {
 		my $promoter_middle = $promoter_up->{$id}->{start} + 2001;
-		my $current_dist = $promoter_middle - $motif_middle;
+		my $current_dist = $promoter_middle - $peak_middle;
 		if($promoter_up->{$id}->{strand} eq "0") {
-			$current_dist = $motif_middle - $promoter_middle;
+			$current_dist = $peak_middle - $promoter_middle;
 		}
 		if(abs($current_dist) < abs($promoter_dist)) {
 			$promoter_dist = $current_dist;
 			$promoter_name = $promoter_up->{$id}->{refseq};
 		}
 	}
-	my $promoter_down = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 <= $motif_middle ORDER by start DESC limit 1", "refseq");
+	my $promoter_down = $dbh->selectall_hashref("SELECT * FROM ann_homer_hg19_tss WHERE chr = 'chr$chr' AND start + 2000 <= $peak_middle ORDER by start DESC limit 1", "refseq");
 	foreach my $id (keys %$promoter_down) {
 		my $promoter_middle = $promoter_down->{$id}->{start} + 2001;
-		my $current_dist = $promoter_middle - $motif_middle;
+		my $current_dist = $promoter_middle - $peak_middle;
 		if($promoter_down->{$id}->{strand} eq "0") {
-			$current_dist = $motif_middle - $promoter_middle;
+			$current_dist = $peak_middle - $promoter_middle;
 		}
 		if(abs($current_dist) < abs($promoter_dist)) {
 			$promoter_dist = $current_dist;
@@ -182,7 +192,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	my $ann_UCSC_switchGearTSS_fwd = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_switchGearTSS WHERE isPseudo = 0 AND confScore > 5 AND strand = '+' AND chrom = '$chr' AND chromStart >= $beg ORDER by chromStart ASC limit 5", "name");
 	foreach my $id (keys %$ann_UCSC_switchGearTSS_fwd) {
-		my $current_dist = $ann_UCSC_switchGearTSS_fwd->{$id}->{chromStart} - $motif_middle;
+		my $current_dist = $ann_UCSC_switchGearTSS_fwd->{$id}->{chromStart} - $peak_middle;
 		if( abs($current_dist) < abs($TSS_dist_fwd) ) {
 			$TSS_name_fwd = $ann_UCSC_switchGearTSS_fwd->{$id}->{name};
 			$TSS_dist_fwd = $current_dist;
@@ -191,7 +201,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	my $ann_UCSC_switchGearTSS_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_switchGearTSS WHERE isPseudo = 0 AND confScore > 5 AND strand = '-' AND chrom = '$chr' AND chromStart <= $end ORDER by chromStart DESC limit 5", "name");
 	foreach my $id (keys %$ann_UCSC_switchGearTSS_rev) {
-		my $current_dist = $motif_middle - $ann_UCSC_switchGearTSS_rev->{$id}->{chromStart};
+		my $current_dist = $peak_middle - $ann_UCSC_switchGearTSS_rev->{$id}->{chromStart};
 		if( abs($current_dist) < abs($TSS_dist_rev) ) {
 			$TSS_name_rev = $ann_UCSC_switchGearTSS_rev->{$id}->{name};
 			$TSS_dist_rev = $current_dist;
@@ -203,7 +213,10 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	### Print peak features
 	my $overlaped_transcripts = 0;
-	print NDG "chr$chr\t$beg\t$end\t$enst_ovl\t";
+	print NDG $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
+		"chr$chr\t$beg\t$end\t".
+		$ref->{region} ."\t". $ref->{peakscore} ."\t".
+		$refseq_ovl . "\t";
 
 	### Print Homer style annotation
 	print NDG "$homer_string\t$promoter_dist\t$promoter_name\t$promoter_id\t$promoter_ensg\t";
@@ -212,25 +225,27 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
 
 	### Print fwd gene annotation
-	print NDG $enst_fwd ."\t". $ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
-	if(exists $ann_enst2geneID->{$enst_fwd}->{ensg_name}) {
-		print NDG $ann_enst2geneID->{$enst_fwd}->{GeneID} ."\t". $ann_enst2geneID->{$enst_fwd}->{Unigene} ."\t".
-			$ann_enst2geneID->{$enst_fwd}->{refseq} ."\t". $ann_enst2geneID->{$enst_fwd}->{symbol} ."\t".
-			$ann_enst2geneID->{$enst_fwd}->{name_desc} ."\t". $ann_enst2geneID->{$enst_fwd}->{description} ."\t";
+	print NDG "$refseq_fwd\t$refseq_fwd_dist_txStart\t$refseq_fwd_dist_cdsStart\t". 
+			$ann_UCSC_RefSeqGenes_fwd->{$refseq_fwd}->{name2} ."\t";
+	if(exists $ann_enst2geneID->{$refseq_fwd}->{ensg_name}) {
+		print NDG $ann_enst2geneID->{$refseq_fwd}->{GeneID} ."\t". $ann_enst2geneID->{$refseq_fwd}->{Unigene} ."\t".
+			$ann_enst2geneID->{$refseq_fwd}->{symbol} ."\t".
+			$ann_enst2geneID->{$refseq_fwd}->{name_desc} ."\t". $ann_enst2geneID->{$refseq_fwd}->{description} ."\t";
 	}
 	else {
-		print NDG "\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print NDG "\tNA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print rev gene annotation
-	print NDG $enst_rev ."\t". $ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
-	if(exists $ann_enst2geneID->{$enst_rev}->{ensg_name}) {
-		print NDG $ann_enst2geneID->{$enst_rev}->{GeneID} ."\t". $ann_enst2geneID->{$enst_rev}->{Unigene} ."\t".
-			$ann_enst2geneID->{$enst_rev}->{refseq} ."\t". $ann_enst2geneID->{$enst_rev}->{symbol} ."\t".
-			$ann_enst2geneID->{$enst_rev}->{name_desc} ."\t". $ann_enst2geneID->{$enst_rev}->{description} ."\t";
+	print NDG "$refseq_rev\t$refseq_rev_dist_txStart\t$refseq_rev_dist_cdsStart\t". 
+			$ann_UCSC_RefSeqGenes_rev->{$refseq_rev}->{name2} ."\t";
+	if(exists $ann_enst2geneID->{$refseq_rev}->{ensg_name}) {
+		print NDG $ann_enst2geneID->{$refseq_rev}->{GeneID} ."\t". $ann_enst2geneID->{$refseq_rev}->{Unigene} ."\t".
+			$ann_enst2geneID->{$refseq_rev}->{symbol} ."\t".
+			$ann_enst2geneID->{$refseq_rev}->{name_desc} ."\t". $ann_enst2geneID->{$refseq_rev}->{description} ."\t";
 	}
 	else {
-		print NDG $enst_rev ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print NDG $refseq_rev ."\tNA\tNA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print motif information
