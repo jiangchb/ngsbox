@@ -36,26 +36,28 @@ my $dbh = '';
 
 
 ### Read gene annotation translation
-my $ann_enst2geneID            = $dbh->selectall_hashref('SELECT * FROM ann_enst2geneID', 'enst_name');
-my $ann_UCSC_ensemblToGeneName = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_ensemblToGeneName', 'ENST');
-#my $ann_UCSC_knownToEnsembl    = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_knownToEnsembl', 'known');
-#my $ann_UCSC_knownToRefSeq     = $dbh->selectall_hashref('SELECT * FROM ann_UCSC_knownToRefSeq', 'known');
+my $ann_enst2geneID       = $dbh->selectall_hashref('SELECT * FROM ann_enst2geneID', 'enst_name');
+my $ann_NCBI_gene2ensembl = $dbh->selectall_hashref('SELECT * FROM ann_NCBI_gene2ensembl', 'RNA_nucleotide_accession');
+my $ann_NCBI_gene_info    = $dbh->selectall_hashref('SELECT * FROM ann_NCBI_gene_info', 'GeneID');
+my $ann_NCBI_gene2refseq  = $dbh->selectall_hashref('SELECT * FROM ann_NCBI_gene2refseq', 'GeneID');
 
 
 
 ### Print peak annotation header
 open NDG, ">peak_annotation_ensembl.txt" or die "Cannot open output file";
-print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\tOverlap_Ensembl\t".
+print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\t".
+
 	# Homer style
-	"Homer_Annotation\tHomer_Nearest_Promoter_Distance\tHomer_Nearest_Promoter_RefSeq\t".
-	"Homer_Nearest_Promoter_EntrezID\ttHomer_Nearest_Promoter_ENSG\t".
+	"Homer:Annotation\tHomer:Nearest_Promoter_Distance\tHomer:Nearest_Promoter_RefSeq\t".
+	"Homer:Nearest_Promoter_EntrezID\tHomer:Nearest_Promoter_ENSG\t".
 
 	# SwitchGearTSS
-	"SwitchGear_TSS_FWD\tSwitchGear_TSS_Distance_FWD\tSwitchGear_TSS_REV\tSwitchGear_TSS_Distance_REV\t".
+	"SwitchGear:TSS_FWD\tSwitchGear:TSS_Distance_FWD\tSwitchGear:TSS_REV\tSwitchGear:TSS_Distance_REV\t".
 
 	# Ensembl
-	"ENST_FWD\tDistance2txStart\tDistance2cdsStart\tENSG_FWD\tEntrezID_FWD\tUniGene_FWD\tRefSeq_FWD\tSymbol_FWD\tName_FWD\tDescription_FWD\t".
-	"ENST_REV\tDistance2txStart\tDistance2cdsStart\tENSG_REV\tEntrezID_REV\tUniGene_REV\tRefSeq_REV\tSymbol_REV\tName_REV\tDescription_REV\t".
+	"Overlap_Ensembl\t".
+	"EnsT:FWD\tDistance:txStart\tDistance:cdsStart\tEnsG:FWD\tGeneID_FWD\tRefSeq:FWD\tSymbol:FWD\tName:FWD\tDescription:FWD\t".
+	"EnsT:REV\tDistance:txStart\tDistance:cdsStart\tEnsG:REV\tGeneID_REV\tRefSeq:REV\tSymbol:REV\tName:REV\tDescription:REV\t".
 	
 	# Fimo motif
 	"Motifs(sequence,distance_from_peak,fimo_score)\n";
@@ -87,7 +89,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	### Get Ensembl rev downstream gene
 	my $enst_rev = "NA";
-	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txStart <= $end ORDER by txStart DESC limit 1", "name");
+	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txEnd <= $end ORDER by txStart DESC limit 1", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_rev) {
 		$enst_rev = $ann_UCSC_Ensembl_rev->{$id}->{name};
 	}
@@ -214,11 +216,8 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 
 	### Print peak features
-	my $overlaped_transcripts = 0;
-	print NDG $ref->{venn_set} ."\t". $ref->{venn_subset} ."\t".
-		"chr$chr\t$beg\t$end\t".
-		$ref->{region} ."\t". $ref->{peakscore} ."\t".
-		$enst_ovl . "\t";
+	print NDG $ref->{venn_set} ."\t". $ref->{venn_subset} ."\tchr$chr\t$beg\t$end\t".
+		$ref->{region} ."\t". $ref->{peakscore} ."\t";
 
 	### Print Homer style annotation
 	print NDG "$homer_string\t$promoter_dist\t$promoter_name\t$promoter_id\t$promoter_ensg\t";
@@ -226,28 +225,60 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	### Print SwitchGear TSS annotation
 	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
 
+	### Print overlapping genes (CDS & Intron)
+	print NDG "$refseq_ovl\t";
+
 	### Print fwd gene annotation
 	print NDG "$enst_fwd\t$enst_fwd_dist_txStart\t$enst_fwd_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
-	if(exists $ann_enst2geneID->{$enst_fwd}->{ensg_name}) {
-		print NDG $ann_enst2geneID->{$enst_fwd}->{GeneID} ."\t". $ann_enst2geneID->{$enst_fwd}->{Unigene} ."\t".
-			$ann_enst2geneID->{$enst_fwd}->{refseq} ."\t". $ann_enst2geneID->{$enst_fwd}->{symbol} ."\t".
-			$ann_enst2geneID->{$enst_fwd}->{name_desc} ."\t". $ann_enst2geneID->{$enst_fwd}->{description} ."\t";
+
+	if(exists $ann_NCBI_gene2ensembl->{$refseq_fwd}->{GeneID}) {
+		my $geneID = $ann_NCBI_gene2ensembl->{$refseq_fwd}->{GeneID};
+
+		print NDG $geneID ."\t".
+			$ann_NCBI_gene2refseq->{$geneID}->{RNA_nucleotide_accession} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{Symbol} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{Synonyms} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{description} ."\t"
+	}
+
+	elsif(exists $ann_enst2geneID->{$enst_fwd}->{GeneID}) {
+		my $geneID = $ann_enst2geneID->{$enst_fwd}->{GeneID};
+
+		print NDG $geneID ."\t".
+			$ann_enst2geneID->{$enst_fwd}->{refseq} ."\t". 
+			$ann_enst2geneID->{$enst_fwd}->{symbol} ."\t".
+			$ann_enst2geneID->{$enst_fwd}->{name_desc} ."\t". 
+			$ann_enst2geneID->{$enst_fwd}->{description} ."\t";
 	}
 	else {
-		print NDG "\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print NDG "NA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print rev gene annotation
 	print NDG "$enst_rev\t$enst_rev_dist_txStart\t$enst_rev_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
-	if(exists $ann_enst2geneID->{$enst_rev}->{ensg_name}) {
-		print NDG $ann_enst2geneID->{$enst_rev}->{GeneID} ."\t". $ann_enst2geneID->{$enst_rev}->{Unigene} ."\t".
-			$ann_enst2geneID->{$enst_rev}->{refseq} ."\t". $ann_enst2geneID->{$enst_rev}->{symbol} ."\t".
-			$ann_enst2geneID->{$enst_rev}->{name_desc} ."\t". $ann_enst2geneID->{$enst_rev}->{description} ."\t";
+
+	if(exists $ann_NCBI_gene2ensembl->{$refseq_rev}->{GeneID}) {
+		my $geneID = $ann_NCBI_gene2ensembl->{$refseq_rev}->{GeneID};
+
+		print NDG $geneID ."\t".
+			$ann_NCBI_gene2refseq->{$geneID}->{RNA_nucleotide_accession} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{Symbol} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{Synonyms} ."\t".
+			$ann_NCBI_gene_info->{$geneID}->{description} ."\t"
+	}
+	elsif(exists $ann_enst2geneID->{$enst_rev}->{GeneID}) {
+		my $geneID = $ann_enst2geneID->{$enst_rev}->{GeneID};
+
+		print NDG $geneID ."\t".
+			$ann_enst2geneID->{$enst_rev}->{refseq} ."\t". 
+			$ann_enst2geneID->{$enst_rev}->{symbol} ."\t".
+			$ann_enst2geneID->{$enst_rev}->{name_desc} ."\t". 
+			$ann_enst2geneID->{$enst_rev}->{description} ."\t";
 	}
 	else {
-		print NDG $enst_rev ."\tNA\tNA\tNA\tNA\tNA\tNA\tNA\t";
+		print NDG "NA\tNA\tNA\tNA\tNA\t";
 	}
 
 	### Print motif information
