@@ -104,8 +104,8 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	foreach my $id (keys %$ann_UCSC_RefSeqGenes_ovl) {
 		$refseq_ovl_hash{$ann_UCSC_RefSeqGenes_ovl->{$id}->{name}} = 1;
 	}
-	foreach my $ensg (sort keys %refseq_ovl_hash) {
-		$refseq_ovl .= "$ensg,";
+	foreach my $refseq (sort keys %refseq_ovl_hash) {
+		$refseq_ovl .= "$refseq,";
 	}
 	chop($refseq_ovl);
 	if($refseq_ovl eq "") { $refseq_ovl = "NA"; }

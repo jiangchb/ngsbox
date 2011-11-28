@@ -100,7 +100,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	### Get Ensembl overlapping genes
 	my $enst_ovl = "";
 	my %enst_ovl_hash = ();
-	my $ann_UCSC_Ensembl_ovl = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE chrom = 'chr$chr' AND $peak_middle between txStart and txEnd", "name");
+	my $ann_UCSC_Ensembl_ovl = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE chrom = 'chr$chr' AND $peak_middle between cdsStart and cdsEnd", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_ovl) {
 		$enst_ovl_hash{$ann_UCSC_Ensembl_ovl->{$id}->{name2}} = 1;
 	}
@@ -226,14 +226,14 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$TSS_name_fwd\t$TSS_dist_fwd\t$TSS_name_rev\t$TSS_dist_rev\t";
 
 	### Print overlapping genes (CDS & Intron)
-	print NDG "$refseq_ovl\t";
+	print NDG "$enst_ovl\t";
 
 	### Print fwd gene annotation
 	print NDG "$enst_fwd\t$enst_fwd_dist_txStart\t$enst_fwd_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
 
-	if(exists $ann_NCBI_gene2ensembl->{$refseq_fwd}->{GeneID}) {
-		my $geneID = $ann_NCBI_gene2ensembl->{$refseq_fwd}->{GeneID};
+	if(exists $ann_NCBI_gene2ensembl->{$enst_fwd}->{GeneID}) {
+		my $geneID = $ann_NCBI_gene2ensembl->{$enst_fwd}->{GeneID};
 
 		print NDG $geneID ."\t".
 			$ann_NCBI_gene2refseq->{$geneID}->{RNA_nucleotide_accession} ."\t".
@@ -259,8 +259,8 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$enst_rev\t$enst_rev_dist_txStart\t$enst_rev_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
 
-	if(exists $ann_NCBI_gene2ensembl->{$refseq_rev}->{GeneID}) {
-		my $geneID = $ann_NCBI_gene2ensembl->{$refseq_rev}->{GeneID};
+	if(exists $ann_NCBI_gene2ensembl->{$enst_rev}->{GeneID}) {
+		my $geneID = $ann_NCBI_gene2ensembl->{$enst_rev}->{GeneID};
 
 		print NDG $geneID ."\t".
 			$ann_NCBI_gene2refseq->{$geneID}->{RNA_nucleotide_accession} ."\t".
