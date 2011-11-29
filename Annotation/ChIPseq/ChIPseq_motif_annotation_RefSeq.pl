@@ -44,8 +44,8 @@ my $ann_NCBI_gene_info    = $dbh->selectall_hashref('SELECT * FROM ann_NCBI_gene
 
 
 ### Print peak annotation header
-open NDG, ">peak_annotation_refseq.txt" or die "Cannot open output file";
-print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_ID\tPeak_Score\t".
+open NDG, ">motif_annotation_refseq.txt" or die "Cannot open output file";
+print NDG "Chr\tMotif_Start\tMotif_End\tMotif_Sequence\tMotif_Score\t".
 
 	# Homer style
 	"Homer:Annotation\tHomer:Nearest_Promoter_Distance\tHomer:Nearest_Promoter_RefSeq\t".
@@ -57,22 +57,19 @@ print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_ID\tPeak_Score\t".
 	# RefSeqGenes
 	"RefSeq:Overlap\t".
 	"RefSeq:FWD\tDistance:txStart\tDistance:cdsStart\tSymbol:FWD\tGeneID:FWD\tEnsT:FWD\tEnsG:FWD\tSyonyms:FWD\tDescription:FWD\t".
-	"RefSeq:REV\tDistance:txStart\tDistance:cdsStart\tSymbol:REV\tGeneID:REV\tEnsT:REV\tEnsG:REV\tSyonyms:REV\tDescription:REV\t".
-	
-	# Fimo motif
-	"Motifs(sequence,distance_from_peak,fimo_score)\n";
+	"RefSeq:REV\tDistance:txStart\tDistance:cdsStart\tSymbol:REV\tGeneID:REV\tEnsT:REV\tEnsG:REV\tSyonyms:REV\tDescription:REV\n";
 
 
-### Get peaks
-my $q= "SELECT * from peak";
+### Get motifs
+my $q= "SELECT * from fimo_gw WHERE score_fimo >= 6";
 my $sth = $dbh->prepare($q);
 $sth->execute();
 my %peak = ();
 
 while (my $ref = $sth->fetchrow_hashref()) {
-	my $chr = $ref->{chr};
-	my $beg = $ref->{start} - 1;
-	my $end = $ref->{end} - 1;
+	my $chr = $ref->{chr_fimo};
+	my $beg = $ref->{start_fimo};
+	my $end = $ref->{stop_fimo};
 	my $peak_middle = ceil( ($beg + $end) / 2 );
 
 
@@ -110,21 +107,6 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	chop($refseq_ovl);
 	if($refseq_ovl eq "") { $refseq_ovl = "NA"; }
 
-
-	### Get fimo motif
-	my $fimo_q= "SELECT * FROM fimo_gw WHERE score_fimo >= 6 && chr_fimo = '$chr' && start_fimo between $beg and $end";
-	my $fimo_sth = $dbh->prepare($fimo_q);
-	$fimo_sth->execute();
-	my %fimo = ();
-	my $TFBS_string = "";
-	while (my $ref = $fimo_sth->fetchrow_hashref()) {
-		my $peak_middle_dist = $peak_middle - $ref->{start_fimo};
-
-		$TFBS_string .= "(". $ref->{seq_fimo} .",$peak_middle_dist,". $ref->{score_fimo}. "),";
-	}
-	chop($TFBS_string);
-	if($TFBS_string eq "") { $TFBS_string = "NA"; }
-	
 
 
 	### Homer style annotation of feature type
@@ -216,8 +198,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 
 	### Print peak features
-	print NDG $ref->{venn_set} ."\t". $ref->{venn_subset} ."\tchr$chr\t$beg\t$end\t".
-		$ref->{region} ."\t". $ref->{peakscore} ."\t";
+	print NDG "chr$chr\t$beg\t$end\t" . $ref->{seq_fimo} ."\t". $ref->{score_fimo} ."\t";
 
 	### Print Homer style annotation
 	print NDG "$homer_string\t$promoter_dist\t$promoter_name\t$promoter_id\t$promoter_ensg\t";
@@ -241,6 +222,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_NCBI_gene_info->{$geneID}->{Synonyms} ."\t".
 			$ann_NCBI_gene_info->{$geneID}->{description} ."\t";
 	}
+
 	elsif( ($refseq_fwd ne "NA") && (exists $ann_enst2geneID->{$refseq_fwd}->{GeneID}) ) {
 		my $geneID = $ann_enst2geneID->{$refseq_fwd}->{GeneID};
 		
@@ -250,6 +232,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_enst2geneID->{$refseq_fwd}->{name_desc} ."\t".
 			$ann_enst2geneID->{$refseq_fwd}->{description} ."\t";
 	}
+
 	else {
 		print NDG "NA\tNA\tNA\tNA\tNA\t";
 	}
@@ -266,7 +249,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_NCBI_gene2ensembl->{$refseq_rev}->{Ensembl_rna_id} ."\t".
 			$ann_NCBI_gene2ensembl->{$refseq_rev}->{Ensembl_gene_id} ."\t".
 			$ann_NCBI_gene_info->{$geneID}->{Synonyms} ."\t".
-			$ann_NCBI_gene_info->{$geneID}->{description} ."\t";
+			$ann_NCBI_gene_info->{$geneID}->{description} ."\n";
 	}
 	elsif( ($refseq_rev ne "NA") && (exists $ann_enst2geneID->{$refseq_rev}->{GeneID}) ) {
 		my $geneID = $ann_enst2geneID->{$refseq_rev}->{GeneID};
@@ -275,16 +258,11 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_enst2geneID->{$refseq_rev}->{enst_name} ."\t".
 			$ann_enst2geneID->{$refseq_rev}->{ensg_name} ."\t".
 			$ann_enst2geneID->{$refseq_rev}->{name_desc} ."\t".
-			$ann_enst2geneID->{$refseq_rev}->{description} ."\t";
+			$ann_enst2geneID->{$refseq_rev}->{description} ."\n";
 	}
 	else {
-		print NDG "NA\tNA\tNA\tNA\tNA\t";
+		print NDG "NA\tNA\tNA\tNA\tNA\n";
 	}
-
-
-	### Print motif information
-	print NDG "$TFBS_string\n";
-
 }
 
 

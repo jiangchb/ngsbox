@@ -45,7 +45,7 @@ my $ann_NCBI_gene2refseq  = $dbh->selectall_hashref('SELECT * FROM ann_NCBI_gene
 
 ### Print peak annotation header
 open NDG, ">peak_annotation_ensembl.txt" or die "Cannot open output file";
-print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_Region\tPeak_Score\t".
+print NDG "Set\tSubset\tChr\tPeak_Start\tPeak_End\tPeak_ID\tPeak_Score\t".
 
 	# Homer style
 	"Homer:Annotation\tHomer:Nearest_Promoter_Distance\tHomer:Nearest_Promoter_RefSeq\t".
@@ -89,7 +89,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 
 	### Get Ensembl rev downstream gene
 	my $enst_rev = "NA";
-	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txEnd <= $end ORDER by txStart DESC limit 1", "name");
+	my $ann_UCSC_Ensembl_rev = $dbh->selectall_hashref("SELECT * FROM ann_UCSC_Ensembl WHERE strand = '-' AND chrom = 'chr$chr' AND txEnd <= $end ORDER by txEnd DESC limit 1", "name");
 	foreach my $id (keys %$ann_UCSC_Ensembl_rev) {
 		$enst_rev = $ann_UCSC_Ensembl_rev->{$id}->{name};
 	}
@@ -232,7 +232,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$enst_fwd\t$enst_fwd_dist_txStart\t$enst_fwd_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_fwd->{$enst_fwd}->{name2} ."\t";
 
-	if(exists $ann_NCBI_gene2ensembl->{$enst_fwd}->{GeneID}) {
+	if( ($enst_fwd ne "NA") && (exists $ann_NCBI_gene2ensembl->{$enst_fwd}->{GeneID}) ) {
 		my $geneID = $ann_NCBI_gene2ensembl->{$enst_fwd}->{GeneID};
 
 		print NDG $geneID ."\t".
@@ -242,7 +242,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_NCBI_gene_info->{$geneID}->{description} ."\t"
 	}
 
-	elsif(exists $ann_enst2geneID->{$enst_fwd}->{GeneID}) {
+	elsif( ($enst_fwd ne "NA") && (exists $ann_enst2geneID->{$enst_fwd}->{GeneID}) ) {
 		my $geneID = $ann_enst2geneID->{$enst_fwd}->{GeneID};
 
 		print NDG $geneID ."\t".
@@ -259,7 +259,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	print NDG "$enst_rev\t$enst_rev_dist_txStart\t$enst_rev_dist_cdsStart\t". 
 			$ann_UCSC_Ensembl_rev->{$enst_rev}->{name2} ."\t";
 
-	if(exists $ann_NCBI_gene2ensembl->{$enst_rev}->{GeneID}) {
+	if( ($enst_rev ne "NA") && (exists $ann_NCBI_gene2ensembl->{$enst_rev}->{GeneID}) ) {
 		my $geneID = $ann_NCBI_gene2ensembl->{$enst_rev}->{GeneID};
 
 		print NDG $geneID ."\t".
@@ -268,7 +268,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 			$ann_NCBI_gene_info->{$geneID}->{Synonyms} ."\t".
 			$ann_NCBI_gene_info->{$geneID}->{description} ."\t"
 	}
-	elsif(exists $ann_enst2geneID->{$enst_rev}->{GeneID}) {
+	elsif(($enst_rev ne "NA") && (exists $ann_enst2geneID->{$enst_rev}->{GeneID}) ) {
 		my $geneID = $ann_enst2geneID->{$enst_rev}->{GeneID};
 
 		print NDG $geneID ."\t".
