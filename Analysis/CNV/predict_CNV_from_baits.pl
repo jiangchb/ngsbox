@@ -25,9 +25,8 @@ use warnings;
 #  Out:
 #
 
-
+use Statistics::Lite qw(:all);
 use Getopt::Long;
-use FindBin;
 
 
 ### Command line parameters
@@ -77,20 +76,35 @@ close CLASSI or die;
 
 
 ### Parse uncertainty (sample vs. bait)
-$i = 0;
+# $i = 0;
+# my @uncertainty = ();
+# open UNCERT, $file_uncertainty or die "Cannot open uncertainty file\n";
+# <UNCERT>;
+### -> use push to invert this matrix
+# while( <UNCERT> ) {
+# 	chomp;
+# 	my @a = split("\t", $_);
+# 	$uncertainty[$i] = \@a;
+# 	$i++;
+# }
+# close UNCERT or die;
+
+
+### Parse uncertainty (bait vs. sample)
 my @uncertainty = ();
 open UNCERT, $file_uncertainty or die "Cannot open uncertainty file\n";
 <UNCERT>;
 while( <UNCERT> ) {
 	chomp;
 	my @a = split("\t", $_);
-	$uncertainty[$i] = \@a;
-	$i++;
+	for(my $x = 0; $x <= $#a; $x++) {
+		push( @{$uncertainty[$x]}, $a[$x] );
+	}
 }
 close UNCERT or die;
 
-#-> Sum up uncertainty per bait. avg must be < 0.001
-
+#print join("\n", @{$uncertainty[8]});
+#exit(0);
 
 ### Parse mean (bait vs. group-mean-cov)
 $i = 0;
@@ -122,68 +136,114 @@ close PROP or die;
 
 ### Parse matrix to predict consecutive CNV paterns
 my %cluster = (); # store consecutive baits that fulfill the CNV criteria and the pattern similarity of >=95%
+my %cluster_fc = ();
+my %cluster_uc = ();
 my $cluster_start_id = -10;
 my $lastid = -10;
-my $conseq = 0; # is this useful? maybe set to 0 if patterns do not overlap or if only one class was predicted
 
 for(my $n = 0; $n <= $#mean; $n++) {
 
-	# Criteria 1: at least two groups
-	if( ($mean[$n][1] ne "NA") && ($mean[$n][1] >= 0.01 ) ) {
+	### If at least two CNV allele groups exist
+	if( $mean[$n][1] ne "NA" ) {
 
-		# Criteria 2: Minor allele frequency
-		if( ($proportions[$n][0] >= 0.03) && ($proportions[$n][1] >= 0.03) ) {
-
-			# Criteria 3: fold change
-			if( ($mean[$n][0] == 0) || ($mean[$n][1]/$mean[$n][0] >= $foldchange) ) {
-
-				# Calculate pattern similarity
-				# TODO run through all samples at the last bait ($lastid) and the new bait ($n)
-
-				# Start new cluster
-				if( $lastid < $n - 10 ) {
-					$cluster{$n} = $n;
-					$cluster_start_id = $n;
-					$lastid = $n;
-				}
-				# Elongagte old cluster
-				else {
-					$cluster{$cluster_start_id} .= ",$n";
-					$lastid = $n;
-				}
-
-				#print "$n\t$mean[$n][0]\t$mean[$n][1]\n";
+		### Sum up rpkm of all groups
+		my $sum_rpkm = 0;
+		for(my $g = 0; $g < 9; $g++) {
+			if($mean[$n][$g] ne "NA") {
+				$sum_rpkm += $mean[$n][$g];
 			}
+		}
+
+		### Calculate uncertainty of sample classification into groups
+		my $mean_uncertainty   = mean(@{$uncertainty[$n]});
+		my $median_uncertainty = median(@{$uncertainty[$n]});
+		my $max_uncertainty    = max(@{$uncertainty[$n]});
+		my $stddev_uncertainty = stddev(@{$uncertainty[$n]});
+		#print $n ."\t". $mean[$n][0] ."\t". $mean[$n][1] ."\t". "$sum_rpkm\t$mean_uncertainty\t$median_uncertainty\t$max_uncertainty\t$stddev_uncertainty\n";
+
+
+		### Check if bait data is meaningful
+		my $use_bait = 1;
+
+		if( $sum_rpkm < 0.01 )              { $use_bait = 0; }   # coverage check
+		elsif( $mean_uncertainty > 0.2 )    { $use_bait = 0; }   # uncertainty check
+		elsif( $median_uncertainty > 0.2 )  { $use_bait = 0; }   # uncertainty check
+		elsif( $proportions[$n][0] < 0.05 ) { $use_bait = 0; }   # minor allele frequency
+		elsif( $proportions[$n][0] > 0.95 ) { $use_bait = 0; }   # minor allele frequency
+		elsif( ($mean[$n][0] != 0) && ($mean[$n][1]/$mean[$n][0] < $foldchange) ) { $use_bait = 0; }
+		
+
+		# All criteria OK
+		if( $use_bait == 1 ) {
+
+
+			# Calculate pattern similarity
+			# TODO run through all samples at the last bait ($lastid) and the new bait ($n)
+
+			# Calculate current fold-change
+			my $current_fc = 1;
+			if($mean[$n][0] == 0) {
+				$current_fc = 2;
+			}
+			else {
+				$current_fc = $mean[$n][1]/$mean[$n][0];
+			}
+
+			# Start new cluster
+			if( $lastid < $n - 10 ) {
+				$cluster{$n} = $n;
+				$cluster_fc{$n} = $current_fc;
+				$cluster_uc{$n} = $mean_uncertainty;
+				$cluster_start_id = $n;
+				$lastid = $n;
+			}
+			# Elongagte old cluster
+			else {
+				$cluster{$cluster_start_id} .= ",$n";
+				$cluster_fc{$cluster_start_id} .= ",$current_fc";
+				$cluster_uc{$cluster_start_id} .= ",$mean_uncertainty";
+				$lastid = $n;
+			}
+
+			#print "$n\t$mean[$n][0]\t$mean[$n][1]\n";
 		}
 	}
 }
 
 foreach my $id (sort {$a<=>$b} keys %cluster) {
+
 	my @a = split(",", $cluster{$id});
-	my $count = $#a + 1;
-	my $bait_ratio = $#a / ($a[$#a] - $a[0] + 1);
+	my $used_baits = $#a + 1;
+	my $baits_in_region = $a[$#a] - $a[0] + 1;
+	my $bait_ratio = $used_baits / $baits_in_region;
 
-	if( ($count >= 4)  && ($bait_ratio > 0.25) ) {
-		#print "COUNT: " . $count . "\n";
-		#print $cluster{$id} . "\n";
+	if( ($used_baits >= 5)  && ($bait_ratio >= 0.25) ) {
+
+		### Length and used baits per megabase
 		my $len = $info[$a[$#a]][1] - $info[$a[0]][0] + 1;
+		my $bpm = $used_baits / $len * 1000000;
 
-		### Print chr, start, end, length, consecutive baits, catched baits %, avg-uncertainty, pattern-similarity, avg-foldchange
-		print $chr ."\t". $info[$a[0]][0] ."\t". $info[$a[$#a]][1] ."\t$len\t$count\t$bait_ratio\n";
+		### mean and median of fold-change
+		my @b = split(",", $cluster_fc{$id});
+		my $mean_fc = mean(@b);
+		my $median_fc = median(@b);
+
+		### mean uncertainty
+		my @c = split(",", $cluster_uc{$id});
+		my $mean_uc = mean(@c);
+
+		### Print chr, start, end, length, consecutive baits,  baits in region, baits %, baits/mb, mean fc, median fc
+		# TODO: avg-uncertainty, pattern-similarity
+		# TODO: printf("%.3f", 3.1415926535);
+		print "$id\t$chr\t". $info[$a[0]][0] ."\t". $info[$a[$#a]][1] ."\t$len\t$used_baits\t$baits_in_region\t";
+		printf("%.3f\t", $bait_ratio);
+		printf("%.3f\t", $bpm);
+		#printf("%.3f\t", $mean_fc); TODO: check, is way to high
+		printf("%.3f\t", $median_fc);
+		printf("%.3f\n", $mean_uc);
 	}
 }
 
-### Min/Max calculation
-sub min {
-	my ($a, $b) = @_;
-	return $a if $a < $b;
-	return $b;
-}
-sub max {
-	my ($a, $b) = @_;
-	return $a if $a > $b;
-	return $b;
-}
 
 
 ### Read command line parameters --------------------------------------------------------------
