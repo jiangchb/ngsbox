@@ -39,15 +39,19 @@ GetCom();
 
 open FASTQ, $fastq or die "Cannot open fastq file\n";
 
+my $c = 1;
+
 while (my $line = <FASTQ>) {
 	if(substr($line, 0, 1) eq "@") {
-		my @a = split " ";
-		print ">".$a[0]."\n";
+		my @a = split " ", $line;
+		#print ">".$a[0]."\n";
+		print ">".$c."\n";
 		my $seq = <FASTQ>;
 		chomp($seq);
 		print "$seq\n";
 		$seq = <FASTQ>;
 		$seq = <FASTQ>;
+		$c++;
 	}
 	else { print "file format not correct!\n"; exit(0); }
 }
