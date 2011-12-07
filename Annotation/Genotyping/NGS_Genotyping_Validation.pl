@@ -102,6 +102,7 @@ while( <GENO> ) {
 				### Genotype array call is Het
 				if($allele_1 ne $allele_2) {
 					$stats{gSNP_het}++;
+					$stats{TP_het}++;
 
 					if( (($ngs_call eq $allele_1) || ($ngs_call eq $allele_2)) && ($GTv[0] eq "0/1") ) {
 						$stats{good_het}++;
@@ -113,6 +114,7 @@ while( <GENO> ) {
 				### Genotype array call is Hom
 				else {
 					$stats{gSNP_hom}++;
+					$stats{TP_hom}++;
 
 					if( ($ngs_call eq $allele_1) && ($ngs_call eq $allele_2) && ($GTv[0] eq "1/1") ) {
 						$stats{good_hom}++;
@@ -125,7 +127,13 @@ while( <GENO> ) {
 			# Case: Genotyping array calls Ref (False Positive)
 			else {
 				$stats{FP}++;
-				#print "$sample, $id, $chr, $pos, $allele_1, $allele_2\n" . $snps{$chr}{$pos} . "\n";
+
+				if($GTv[0] eq "0/1") {
+					$stats{FP_het}++;
+				}
+				elsif($GTv[0] eq "1/1") {
+					$stats{FP_hom}++;
+				}
 			}
 		}
 		### Case: No NGS SNP called
@@ -138,12 +146,12 @@ while( <GENO> ) {
 				# Missed Het
 				if($allele_1 ne $allele_2) {
 					$stats{gSNP_het}++;
-					$stats{missed_het}++;
+					$stats{FN_het}++;
 				}
 				# Missed Hom
 				else {
 					$stats{gSNP_hom}++;
-					$stats{missed_hom}++;
+					$stats{FN_hom}++;
 				}
 			}
 			# Case: Genotyping array calls Ref (True Negative)
@@ -153,8 +161,17 @@ while( <GENO> ) {
 		}
 	}
 }
-	
-print "Sample: $genotype" .
+
+my $sensitivity = $stats{TP} / ($stats{TP} + $stats{FN});
+my $sensitivity_het = $stats{TP_het} / ($stats{TP_het} + $stats{FN_het});
+my $sensitivity_hom = $stats{TP_hom} / ($stats{TP_hom} + $stats{FN_hom});
+
+my $PPV = $stats{TP} / ($stats{TP} + $stats{FP});
+my $PPV_het = $stats{TP_het} / ($stats{TP_het} + $stats{FP_het});
+my $PPV_hom = $stats{TP_hom} / ($stats{TP_hom} + $stats{FP_hom});
+
+
+print "Sample: $genotype\n" .
 	"\nTotal genotyped positions: " . $stats{total_genotypes} .
 	"\nTotal genotyped SNPs: " . $stats{total_gSNP}++ .
 	"\nTotal NGS SNPs: " . $stats{total_ngsSNP} .
@@ -163,16 +180,28 @@ print "Sample: $genotype" .
 	"\nNGS FP: " . $stats{FP} .
 	"\nNGS TN: " . $stats{TN} .
 	"\nNGS FN: " . $stats{FN} .
+	"\nNGS PPV: " . $PPV .
+	"\nNGS Sensitivity: " . $sensitivity .
 	"\n" .
+
 	"\nGenotyping Het: " . $stats{gSNP_het} .
-	"\nMissed Het: " . $stats{missed_het} .
-	"\nGood Het: " . $stats{good_het} .
-	"\nBad Het: " . $stats{bad_het} .
+	"\nHet TP : " . $stats{TP_het} .
+	"\nHet TP (correct allele): " . $stats{good_het} .
+	"\nHet TP (wrong allele): " . $stats{bad_het} .
+	"\nHet FP: " . $stats{FP_het} .
+	"\nHet FN: " . $stats{FN_het} .
+	"\nHet PPV: " . $PPV_het .
+	"\nHet Sensitivity: " . $sensitivity_het .
 	"\n".
+
 	"\nGenotyping Hom: " . $stats{gSNP_hom} .
-	"\nMissed Hom: " . $stats{missed_hom} .
-	"\nGood Hom: " . $stats{good_hom} .
-	"\nBad Hom: " . $stats{bad_hom} .
+	"\nHom TP : " . $stats{TP_hom} .
+	"\nHom TP (correct allele): " . $stats{good_hom} .
+	"\nHom TP (wrong allele): " . $stats{bad_hom} .
+	"\nHom FP: " . $stats{FP_hom} .
+	"\nHom FN: " . $stats{FN_hom} .
+	"\nHom PPV: " . $PPV_hom .
+	"\nHom Sensitivity: " . $sensitivity_hom .
 	"\n\n";
 
 close GENO;
