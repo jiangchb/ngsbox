@@ -39,13 +39,12 @@ GetCom();
 open FL, $fl or die "Cannot open fl file\n";
 
 while (my $line = <FL>) {
-	chomp();
 	my @a = split " ", $line;
 
-	print "@".$a[0]."\n";
+	print "@".$a[0]." ".$a[2]."\n";
 	print $a[1]."\n";
 	print "+\n";
-	print $a[4]. "\n";
+	print $a[3]. "\n";
 }
 
 
