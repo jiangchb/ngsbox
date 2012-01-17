@@ -43,7 +43,10 @@ while (<FILE>) {
 		my $end = $beg + $a[3] - 1;
 
 		# chr, start, end, name, rank, fake-strand
-		print "chr". $a[1] ."\t$beg\t$end\tchr-$a[1]-$beg\t$a[4]\t+\n";
+		# print "chr". $a[1] ."\t$beg\t$end\tchr-$a[1]-$beg\t$a[4]\t+\n";
+		
+		# chr, start, end, name
+		print "chr". $a[1] ."\t$beg\t$end\tpeak_" . $a[4] . "\n";
 	}
 }
 
