@@ -19,7 +19,7 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::FASTQ::cut_length.pl
+#  Module: Parser::FASTQ::merge_read_1_2.pl
 #  Purpose:
 #  In:
 #  Out:
@@ -27,30 +27,31 @@ use warnings;
 
 
 
-my $usage  = "$0 start end minlength file\n";
-my $beg    = shift or die $usage;
-my $end    = shift or die $usage;
-my $min    = shift or die $usage;
+my $usage  = "$0 file\n";
 my $file   = shift or die $usage;
 
-open IN, $file or die "Cannot open input file\n";
+open F1, $file or die "Cannot open input read 1 file\n";
 
-while( <IN> ) {
-	my $h1  = $_;
-	my $seq = <IN>;
-	my $h2  = <IN>;
-	my $qual = <IN>;
+open R1, ">$file.r1" or die "Cannot open output read 1 file\n";
+open R2, ">$file.r2" or die "Cannot open output read 2 file\n";
 
-	chomp $seq;
-	chomp $qual;
-	my $print_seq  = substr( $seq, $beg - 1, ($end - $beg + 1) );
-	my $print_qual = substr( $qual, $beg - 1, ($end - $beg + 1) );
+while( <F1> ) {
+	my $sh1   = $_;
+	my $seq1  = <F1>;
+	my $qh1   = <F1>;
+	my $qual1 = <F1>;
 
-	if( length($print_seq) >= $min ) {
-		print "$h1$print_seq\n$h2$print_qual\n";
-	}
+	my $sh2   = <F1>;
+	my $seq2  = <F1>;
+	my $qh2   = <F1>;
+	my $qual2 = <F1>;
+
+	print R1 "$sh1$seq1$qh1$qual1";
+	print R2 "$sh2$seq2$qh2$qual2";
 }
 
-close IN;
+close F1;
+close R1;
+close R2;
 
 exit(0);
