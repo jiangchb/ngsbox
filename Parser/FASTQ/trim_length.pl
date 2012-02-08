@@ -19,9 +19,9 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::FASTQ::cut_length.pl
-#  Purpose:
-#  In:
+#  Module: Parser::FASTQ::trim_length.pl
+#  Purpose: shorten reads in fastq files
+#  In: 
 #  Out:
 #
 
