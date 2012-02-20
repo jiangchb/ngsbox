@@ -86,7 +86,7 @@ foreach my $read1 (@files) {
 
 my $qsubNname; 
 if ($name =~ /^\d/) {
-	$qsubNname = '_'.$name;
+	$qsubNname = 's'.$name;
 }
 else {
 	$qsubNname = $name;
