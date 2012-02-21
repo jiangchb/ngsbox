@@ -1,6 +1,7 @@
 #! /usr/bin/perl
 use strict;
 use warnings;
+use Getopt::Long;
 
 ###### 
 # NGSbox - bioinformatics analysis tools for next generation sequencing data
@@ -24,15 +25,35 @@ use warnings;
 #  In:
 #  Out:
 #
+sub usage { print "\n$0 \n usage:\n",
+	   "--infolder \t folder containing the raw sequence data in fastq format \n",
+	   "--outfolder \t folder to write the analysis to \n",
+	   "--qsubname \t name of the script you want to start lateron \n",
+	   "--max_coverage \t used in SNP filtering with samtools (400 works well) \n",
+	   "--namestart \t  start of a substring in the read file name (first letter is numbered 0) \n",
+	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
+	   "--readextension \t describes the name of the read files (e.g. fastq.gz)\n",
+	   "--help \t\t show help \n";
+	   
+	   }
 
+my $infolder;
+my $outfolder;
+my $qsub_name;
+my $max_cov; 
+my $nameStart;
+my $nameLength;
+my $readextension;
+my $help = 0;
 
-my $usage = "\n$0 infolder outfolder qsubName max_coverage\n\n";
-my $infolder  = shift or die $usage;
-my $outfolder = shift or die $usage;
-my $qsub_name = shift or die $usage;
-my $max_cov   = shift or die $usage;
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "help=s" => \$help);
 
-my @files = glob($infolder . "/*.fq");
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $readextension && $help == 0) {
+	usage;
+	exit;
+}
+
+my @files = glob($infolder . "/*$readextension");
 
 foreach my $file (@files) {
 
@@ -40,7 +61,7 @@ foreach my $file (@files) {
 	my $fileleaf = $filepath[$#filepath];
 
 
-	my $name = substr($fileleaf, 0, 3);
+	my $name = substr($fileleaf, $nameStart, $nameLength);
 
 	if(! -e "$outfolder/$name") {
 		mkdir "$outfolder/$name" or die "Cannot create output directory $outfolder/$name";
@@ -51,17 +72,26 @@ foreach my $file (@files) {
 
 	open OUT, ">$outfolder/$name/$qsub_name" or die "Cannot create qsub file $outfolder/$name/$qsub_name";
 
-
+my $qsubNname; 
+if ($name =~ /^\d/) {
+	$qsubNname = 's'.$name;
+}
+else {
+	$qsubNname = $name;
+}# qsub doesn't like jobs starting with a digit
 
 my @qsub = ("#!/bin/bash
 
+#\$ -N $qsubNname
 #\$ -e $outfolder/$name/
 #\$ -o $outfolder/$name/
 
 
-source /users/GD/so/sossowski/.bashrc
+source /users/so/sossowski/.bashrc
 export TMPDIR=/users/GD/projects/HumanDisease/tmp
-export PATH=/users/GD/tools/annovar/annovar_2011May06/:\$PATH
+export _JAVA_OPTIONS=-Djava.io.tmpdir=/users/GD/projects/HumanDisease/tmp
+# export PATH=/users/GD/tools/annovar/annovar_2011May06/:\$PATH
+export PATH=/users/GD/tools/annovar/annovar_2011Nov20/:\$PATH
 
 
 NAME=$name
@@ -70,12 +100,12 @@ OUTF=$outfolder/$name
 REF=/users/GD/projects/genome_indices/human/hg19/bwa/hg19.fasta
 # EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_standard/shore_format
 # EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_extended/shore_format
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/shore_format
-EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/custom_psoriasis/shore_format
-BWA=/users/GD/tools/bwa/bwa-0.5.9/bwa
-GATK=/users/GD/tools/GATK_src/dist/GenomeAnalysisTK.jar
-SAMTOOLS=/soft/molbio/samtools-0.1.16
-ANNOVAR=/users/GD/tools/annovar/annovar_2011May06
+EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/shore_format
+BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
+GATK=/users/GD/tools/GATK/GATK_src_1.4-15-gcd43f01/dist/GenomeAnalysisTK.jar
+SAMTOOLS=/soft/bin
+# ANNOVAR=/users/GD/tools/annovar/annovar_2011May06
+ANNOVAR=/users/GD/tools/annovar/annovar_2011Nov20
 SHORE=/users/GD/tools/shore/shore
 NGSBOX=/users/GD/tools/ngsbox
 
@@ -85,32 +115,67 @@ NGSBOX=/users/GD/tools/ngsbox
 
 
 ### Correct paired end files
-\$BWA samse -r \"\@RG\\tID:\$NAME\\tSM:\$NAME\" -n 10 -f \$OUTF/\$NAME.sam \$REF \$OUTF/\$NAME.sai \$FASTQ
-
+if [ -s \$OUTF/\$NAME.sai ];
+then
+   echo BWA sampe
+   \$BWA samse -r \"\@RG\\tID:\$NAME\\tSM:\$NAME\" -n 10 -f \$OUTF/\$NAME.sam \$REF \$OUTF/\$NAME.sai \$FASTQ
+else
+   echo \$NAME.sai
+   exit
+fi
 
 ### Convert SAM to BAM
-\$SAMTOOLS/samtools view -b -S -o \$OUTF/\$NAME.bam \$OUTF/\$NAME.sam
-
+if [ -s \$OUTF/\$NAME.sam ];
+then
+   echo Convert SAM to BAM
+   \$SAMTOOLS/samtools view -b -S -o \$OUTF/\$NAME.bam \$OUTF/\$NAME.sam
+else
+   echo \$NAME.sam not found
+   exit
+fi
 
 ### Sort BAM file
-\$SAMTOOLS/samtools sort \$OUTF/\$NAME.bam \$OUTF/\$NAME.sort
-
+if [ -s \$OUTF/\$NAME.bam ];
+then
+   echo Sort BAM
+   \$SAMTOOLS/samtools sort \$OUTF/\$NAME.bam \$OUTF/\$NAME.sort
+else
+   echo \$NAME.bam not found
+   exit
+fi
 
 ### Index sorted BAM file
-\$SAMTOOLS/samtools index \$OUTF/\$NAME.sort.bam
-
-
+if [ -s \$OUTF/\$NAME.sort.bam ];
+then
+   echo Index sorted BAM file
+   \$SAMTOOLS/samtools index \$OUTF/\$NAME.sort.bam
+else
+   echo \$NAME.sort.bam not found
+   exit
+fi
 
 ### Local Re-alignment
-java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -B:indels,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --minReadsAtLocus 6 --maxIntervalSize 200
-java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -B:indels,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
+if [ -s \$OUTF/\$NAME.sort.bam.bai ];
+then
+   echo Local Re-alignment
+   java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --minReadsAtLocus 6 --maxIntervalSize 200
+   java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
+else
+   echo \$NAME.sort.bam.bai not found
+   exit
+fi
 
 
-
-### Base quality recallibration
-java -Xmx4g -jar \$GATK -T CountCovariates -nt 8 --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.bam -B:mask,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf
-java -Xmx4g -jar \$GATK -T TableRecalibration --default_platform illumina -R \$REF -I \$OUTF/\$NAME.realigned.bam -recalFile \$OUTF/recal_data.csv --out \$OUTF/\$NAME.realigned.recalibrated.bam
-
+### Base quality recalibration
+if [ -s \$OUTF/\$NAME.realigned.dm.bam ];
+then
+   echo Base quality recalibration
+   java -Xmx4g -jar \$GATK -T CountCovariates -nt 8 --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf
+   java -Xmx4g -jar \$GATK -T TableRecalibration --default_platform illumina -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -recalFile \$OUTF/recal_data.csv --out \$OUTF/\$NAME.realigned.dm.recalibrated.bam
+else
+   echo \$NAME.realigned.dm.bam not found
+   exit
+fi
 
 
 ### Cleanup
@@ -120,36 +185,61 @@ rm \$OUTF/\$NAME.realigned.bai
 
 
 ### GATK: Call SNPs and Indels with the GATK Unified Genotyper
-java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.recalibrated.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
-java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.recalibrated.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
+if [ -s \$OUTF/\$NAME.realigned.dm.recalibrated.bam ];
+then
+   echo GATK: Call SNPs and Indels with the GATK Unified Genotyper
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
+else
+   echo \$NAME.realigned.dm.recalibrated.bam not found
+   exit
+fi
+
+if [ ! -s \$OUTF/GATK.snps.raw.vcf ];
+then
+   echo GATK.snps.raw.vcf not found
+   exit
+fi
 
 
 
 ### MPILEUP: Call SNPs and Indels
-\$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.realigned.recalibrated.bam | \$SAMTOOLS/bcftools/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
-\$SAMTOOLS/bcftools/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/bcftools/vcfutils.pl varFilter -d5 -D$max_cov -W 20 > \$OUTF/MPILEUP.variant.raw.vcf
+ \$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.realigned.dm.recalibrated.bam | \$SAMTOOLS/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
+ \$SAMTOOLS/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/vcfutils.pl varFilter -d5 -D$max_cov -W 20 > \$OUTF/MPILEUP.variant.raw.vcf
 egrep \"INDEL|#\" \$OUTF/MPILEUP.variant.raw.vcf > \$OUTF/MPILEUP.indel.raw.vcf
 grep -v INDEL \$OUTF/MPILEUP.variant.raw.vcf > \$OUTF/MPILEUP.snps.raw.vcf
+
+if [ ! -s \$OUTF/MPILEUP.snps.raw.vcf ];
+then
+   echo MPILEUP.snps.raw.vcf not found
+   exit
+fi
 
 
 
 ### SHORE: Prepare format map.list
 mkdir \$OUTF/shore
-\$SHORE convert --sort -r \$REF -n 3 -g 1 -e 10 -s Alignment2Maplist \$OUTF/\$NAME.realigned.recalibrated.bam \$OUTF/shore/map.list.gz
+ \$SHORE convert --sort -r \$REF -n 3 -g 1 -e 10 -s Alignment2Maplist \$OUTF/\$NAME.realigned.dm.recalibrated.bam \$OUTF/shore/map.list.gz
+
+if [ ! -s \$OUTF/shore/map.list.gz ];
+then
+   echo shore/map.list.gz not found
+   exit
+fi
 
 
 
 ### SHORE: compute coverage plot in GFF format for browsers
-\$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis
+ \$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis
 
 
 
 ### SHORE: Compute enrichment
-\$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus200 -f \$EXOME/Exome_Array_plus200.bed -H 1,1 -k
-\$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus150 -f \$EXOME/Exome_Array_plus150.bed -H 1,1 -k
-\$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus100 -f \$EXOME/Exome_Array_plus100.bed -H 1,1 -k
-\$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus50 -f \$EXOME/Exome_Array_plus50.bed -H 1,1 -k
-\$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus0 -f \$EXOME/Exome_Array_plus0.bed -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus200 -f \$EXOME/Exome_Array_plus200.bed -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus150 -f \$EXOME/Exome_Array_plus150.bed -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus100 -f \$EXOME/Exome_Array_plus100.bed -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus50 -f \$EXOME/Exome_Array_plus50.bed -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus0 -f \$EXOME/Exome_Array_plus0.bed -H 1,1 -k
 
 
 
@@ -162,9 +252,13 @@ grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$
 
 
 ### SHORE: Call SNPs and Indels
-\$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 3 -y -v
+ \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E  \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 3 -y -v
 
-
+if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
+then
+   echo shore/Variants/ConsensusAnalysis is empty
+   exit
+fi
 
 ### Clean up
 rm -r \$OUTF/shore/Variants/ConsensusAnalysis/supplementary_data
@@ -193,6 +287,12 @@ grep -v \"CRG\" \$OUTF/SNP_Intersection/SHORE.snps.filtered.vcf | grep -v \"SnpC
 sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-GATK/\" \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf
 sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-MPILEUP/\" \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf
 sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-SHORE/\" \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf
+
+if [[ ! ( -s \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf && -s \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf && -s \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf ) ]];
+then
+   echo GATK.snps.filtered.cleaned.vcf or MPILEUP.snps.filtered.cleaned.vcf or SHORE.snps.filtered.cleaned.vcf not found
+   exit
+fi
 
 # Intersecting
 java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -B:SHORE,VCF \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf -B:GATK,VCF \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf -B:MPILEUP,VCF \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/SNP_Intersection/merged.vcf
@@ -231,6 +331,12 @@ grep  -v \"CRG\" \$OUTF/Indel_Intersection/SHORE.indel.filtered.vcf | grep -v \"
 # sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-GATK/\" \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf
 # sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-MPILEUP/\" \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf
 # sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-SHORE/\" \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf
+
+if [[ ! ( -s \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf && -s \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf && -s \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf ) ]];
+then
+   echo GATK.indel.filtered.cleaned.vcf or MPILEUP.indel.filtered.cleaned.vcf or SHORE.indel.filtered.cleaned.vcf not found
+   exit
+fi
 
 # Intersecting
 java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -B:SHORE,VCF \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf -B:GATK,VCF \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf -B:MPILEUP,VCF \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/Indel_Intersection/merged.vcf

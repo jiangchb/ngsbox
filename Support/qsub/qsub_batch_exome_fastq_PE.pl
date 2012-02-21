@@ -31,15 +31,13 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--outfolder \t folder to write the analysis to \n",
 	   "--qsubname \t name of the script you want to start lateron \n",
 	   "--max_coverage \t used in SNP filtering with samtools (400 works well) \n",
-	   "--namestart \t starting with first letter numbered 0 \n",
-	   "--namelength \t the part of the filenames which should be taken as sample (and folder) name \n",
+	   "--namestart \t  start of a substring in the read file name (first letter is numbered 0) \n",
+	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
+	   "--firstreadextension \t describes the name of the first read file (e.g. 1.fastq.gz or 1_sequence.txt.gz)\n",
+	   "--secondreadextension \t describes the name of the first read file (e.g. 2.fastq.gz or 2_sequence.txt.gz)\n",
 	   "--help \t\t show help \n";
 	   
 	   }
-# my $infolder  = shift or die $usage;
-# my $outfolder = shift or die $usage;
-# my $qsub_name = shift or die $usage;
-# my $max_cov   = shift or die $usage;
 
 my $infolder;
 my $outfolder;
@@ -47,24 +45,26 @@ my $qsub_name;
 my $max_cov; 
 my $nameStart;
 my $nameLength;
+my $firstreadextension;
+my $secondreadextension;
 my $help = 0;
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "help=s" => \$help);
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $help == 0) {
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $firstreadextension && $secondreadextension && $help == 0) {
 	usage;
 	exit;
 }
 
-my @files = glob($infolder . "/*1.fastq.gz");
+my @files = glob($infolder . "/*$firstreadextension");
 
 
 foreach my $read1 (@files) {
 
 	# read 2 filename
 	my $read2 = $read1;
-	$read2 =~ s/1.fastq.gz/2.fastq.gz/g;
-
+	$read2 =~ s/$firstreadextension/$secondreadextension/ge;
+	
 	my @filepath = split("/", $read1);
 	my $fileleaf = $filepath[$#filepath];
 
@@ -174,7 +174,7 @@ if [ -s \$OUTF/\$NAME.sort.bam.bai ];
 then
    echo Local Re-alignment
    java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --minReadsAtLocus 6 --maxIntervalSize 200
-java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
+   java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
 else
    echo \$NAME.sort.bam.bai not found
    exit
