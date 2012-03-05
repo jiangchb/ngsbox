@@ -33,12 +33,12 @@ my $file2   = shift or die $usage;
 
 my $adapter = "GATCGGAAGAGCACACGTCTGAACTCCAGTCACACAGTGATCTCGTATGC";
 
-my $spacer_fwd = "TCGTATAACTTCGTATAATGTATGCTATACGAAGTTATTACG";
-my @spacer_fwd = ("TCGTATAACT", "TCTCGTATGC");
+my @spacer_fwd = ("TCGTATAACTTCGTATAATGTATGCTATACGAAGTTATTACG", "TCGTATAACT", "TCTCGTATGC");
+my @spacer_rev = ("CGTAATAACTTCGTATAGCATACATTATACGAAGTTATACGA", "CGTAATAACT", "AGTTATACGA");
 
-my $spacer_rev = "CGTAATAACTTCGTATAGCATACATTATACGAAGTTATACGA";
-my @spacer_rev = ("CGTAATAACT", "AGTTATACGA");
-
+my %spacer = ();
+$spacer{fwd} = \@spacer_fwd;
+$spacer{rev} = \@spacer_rev;
 
 open F1, $file1 or die "Cannot open input read 1 file\n";
 open F2, $file2 or die "Cannot open input read 2 file\n";
@@ -71,91 +71,88 @@ while( <F1> ) {
 	}
 
 
-	####### FWD ######
+	foreach my $strand ( sort keys %spacer ) {
 
-	### Read 1, cases 1/2/3:
+		my $spacer     = $spacer{$strand}[0];
+		my $spacer_beg = $spacer{$strand}[1];
+		my $spacer_end = $spacer{$strand}[2];
 
-	# start of spacer sequence identified
-	if( (! $spacer_found) && ($seq1 =~ m/$spacer_beg/) ) {
+
+		### Read 1, cases 1/2/3:
+
+		# start of spacer sequence identified
+		if( (! $spacer_found) && ($seq1 =~ m/$spacer_beg/) ) {
 		
-		$spacer_found = 1;
+			$spacer_found = 1;
 
-		# Not case 1:
-		if( length($`) >= $min) {
-			my $print_seq1  = substr($seq1, 0, length($`));
-			my $print_qual1 = substr($qual1, 0, length($`));
-
-			print O1 "$sh1$print_seq1\n$qh1$print_qual1\n";
-			print O2 "$sh2$seq2\n$qh2$qual2\n";
-		}
-		
-	}
-
-	# end of spacer sequence identified
-	if( (! $spacer_found) && ($seq1 =~ m/$spacer_end/) ) {
-
-		$spacer_found = 1;
-
-		my $remaining_length = length($`) + length($&) - length($spacer);
-		
-		# Not case 1:
-		if( $remaining_length >= $min) {
-			my $print_seq1  = substr($seq1, 0, $remaining_length);
-			my $print_qual1 = substr($qual1, 0, $remaining_length);
-
-			print O1 "$sh1$print_seq1\n$qh1$print_qual1\n";
-			print O2 "$sh2$seq2\n$qh2$qual2\n";
-		}
-	}
-
-	### Read 2, cases 5/6/7:
-	# start of spacer sequence identified
-	if( (! $spacer_found) && ($seq2 =~ m/($spacer_beg)/) ) {
-
-		$spacer_found = 1;
-
-		# Case 1 (exclude):
-		if( length($`) >= $min) {
-			my $print_seq2  = substr($seq2, 0, length($`));
-			my $print_qual2 = substr($qual2, 0, length($`));
-
-			# TODO filter
-
-			print O1 "$sh1$seq1\n$qh1$qual1\n";
-			print O2 "$sh2$print_seq2\n$qh2$print_qual2\n";
-			# print "Case: $` $& $'\n";
-			# exit(1);
-		}
-	}
-
-	# end of spacer sequence identified
-	if( (! $spacer_found) && ($seq2 =~ m/($spacer_end)/) ) {
-
-		$spacer_found = 1;
-
-		my $remaining_length = length($`) + length($&) - length($spacer);
-
-		# Not case 1:
-		if( $remaining_length >= $min) {
-			my $print_seq2  = substr($seq2, 0, $remaining_length);
-			my $print_qual2 = substr($qual2, 0, $remaining_length);
-
-			print O1 "$sh1$seq1\n$qh1$qual1\n";
-			print O2 "$sh2$print_seq2\n$qh2$print_qual2\n";
-			print "Case: $` $& $'\n";
-			exit(1);
+			# Not case 1:
+			if( length($`) >= $min) {
+				my $print_seq1  = substr($seq1, 0, length($`));
+				my $print_qual1 = substr($qual1, 0, length($`));
+	
+				print O1 "$sh1$print_seq1\n$qh1$print_qual1\n";
+				print O2 "$sh2$seq2\n$qh2$qual2\n";
+				#print "Case: $` $& $'\n";
+			}
 		}
 
-		my $print_seq2  = substr($seq2, 0, $remaining_length);
-		
+		# end of spacer sequence identified
+		if( (! $spacer_found) && ($seq1 =~ m/$spacer_end/) ) {
+	
+			$spacer_found = 1;
+	
+			my $remaining_length = length($`) + length($&) - length($spacer);
+			
+			# Not case 1:
+			if( $remaining_length >= $min) {
+				my $print_seq1  = substr($seq1, 0, $remaining_length);
+				my $print_qual1 = substr($qual1, 0, $remaining_length);
+	
+				print O1 "$sh1$print_seq1\n$qh1$print_qual1\n";
+				print O2 "$sh2$seq2\n$qh2$qual2\n";
+				#print "Case: $` $& $'\n";
+			}
+		}
 
+		### Read 2, cases 5/6/7:
+		# start of spacer sequence identified
+		if( (! $spacer_found) && ($seq2 =~ m/($spacer_beg)/) ) {
+
+			$spacer_found = 1;
+
+			# Not case 1:
+			if( length($`) >= $min) {
+				my $print_seq2  = substr($seq2, 0, length($`));
+				my $print_qual2 = substr($qual2, 0, length($`));
+	
+				print O1 "$sh1$seq1\n$qh1$qual1\n";
+				print O2 "$sh2$print_seq2\n$qh2$print_qual2\n";
+				#print "Case: $` $& $'\n";
+			}
+		}
+
+		# end of spacer sequence identified
+		if( (! $spacer_found) && ($seq2 =~ m/($spacer_end)/) ) {
+	
+			$spacer_found = 1;
+	
+			my $remaining_length = length($`) + length($&) - length($spacer);
+	
+			# Not case 1:
+			if( $remaining_length >= $min) {
+				my $print_seq2  = substr($seq2, 0, $remaining_length);
+				my $print_qual2 = substr($qual2, 0, $remaining_length);
+	
+				print O1 "$sh1$seq1\n$qh1$qual1\n";
+				print O2 "$sh2$print_seq2\n$qh2$print_qual2\n";
+				#print "Case: $` $& $'\n";
+			}
+
+		}
 	}
-
 
 	# Case 4 (good)
 	if(! $spacer_found) {
-
-		#TODO filter
 
 		print O1 "$sh1$seq1\n$qh1$qual1\n";
 		print O2 "$sh2$seq2\n$qh2$qual2\n";
