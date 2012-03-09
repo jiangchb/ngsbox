@@ -40,14 +40,12 @@ my $spacer_rev_string = "CGTAATAACTTCGTATAGCATACATTATACGAAGTTATACGA";
 
 my @spacer_fwd = ( $spacer_fwd_string, substr($spacer_fwd_string, 0, $seed), substr($spacer_fwd_string, length($spacer_fwd_string) - $seed, $seed) );
 my @spacer_rev = ( $spacer_rev_string, substr($spacer_rev_string, 0, $seed), substr($spacer_rev_string, length($spacer_rev_string) - $seed, $seed) );
-#print "$spacer_fwd[0]\t$spacer_fwd[1]\t$spacer_fwd[2]\n";
-#print "$spacer_rev[0]\t$spacer_rev[1]\t$spacer_rev[2]\n";
-
 
 
 my %spacer = ();
 $spacer{fwd} = \@spacer_fwd;
 $spacer{rev} = \@spacer_rev;
+
 
 open F1, $file1 or die "Cannot open input read 1 file\n";
 open F2, $file2 or die "Cannot open input read 2 file\n";
@@ -79,15 +77,11 @@ while( <F1> ) {
 	my @header2 = split(":", $sh2);
 	if( ($header1[7] eq "Y") || ($header2[7] eq "Y") ) {
 		$determined = 1;
-		#print "$sh1$seq1\n$qh1$qual1\n$sh2$seq2\n$qh2$qual2\n";
-		#print "$qual1\t$qual2\n";
 	}
 
 	# Check Illumina adapter sequence
 	if( ($seq1 =~ m/$adapter/) || ($seq2 =~ m/$adapter/) ) {
 		$determined = 1;
-		#print "$sh1$seq1\n$qh1$qual1\n$sh2$seq2\n$qh2$qual2\n";
-		#print "$seq1\t$seq2\n";
 	}
 
 
@@ -107,7 +101,7 @@ while( <F1> ) {
 			if( &compare_seq($spacer_seq, $spacer_in_read) ) {
 				$determined = 1;
 
-				# Not case 1:
+				# good case:
 				if( length($`) >= $min) {
 					my $print_seq1  = substr($seq1, 0, length($`));
 					my $print_qual1 = substr($qual1, 0, length($`));
@@ -117,9 +111,6 @@ while( <F1> ) {
 
 					#print "$` $& $' " . length($`) . "\t" . length($spacer_seq) . "\t$spacer_seq\t$spacer_in_read\n";
 				}
-				#else {
-				#	print "$` $& $' " . length($`) . "\t" . length($spacer_seq) . "\t$spacer_seq\t$spacer_in_read\n";
-				#}
 			}
 		}
 
@@ -137,7 +128,7 @@ while( <F1> ) {
 			if( &compare_seq($remaining_spacer, $spacer_in_read) ) {
 				$determined = 1;	
 
-				# Not case 1:
+				# good case:
 				if( $remaining_read >= $min) {
 					my $print_seq1  = substr($seq1, 0, $remaining_read);
 					my $print_qual1 = substr($qual1, 0, $remaining_read);
@@ -147,9 +138,6 @@ while( <F1> ) {
 
 					#print "$& $'\t" . length($&) . "\t$cut_spacer\t$remaining_read\t$remaining_spacer\t$spacer_in_read\n";
 				}
-				#else {
-				#	print "$& $'\t" . length($&) . "\t$cut_spacer\t$remaining_read\t$remaining_spacer\t$spacer_in_read\n";
-				#}
 			}
 			
 		}
@@ -162,7 +150,7 @@ while( <F1> ) {
 			if( &compare_seq($spacer_seq, $spacer_in_read) ) {
 				$determined = 1;
 
-				# Not case 1:
+				# good case:
 				if( length($`) >= $min) {
 					my $print_seq2  = substr($seq2, 0, length($`));
 					my $print_qual2 = substr($qual2, 0, length($`));
@@ -172,9 +160,6 @@ while( <F1> ) {
 
 					#print "$` $& $' " . length($`) . "\t" . length($spacer_seq) . "\t$spacer_seq\t$spacer_in_read\n";
 				}
-				#else {
-				#	print "$` $& $' " . length($`) . "\t" . length($spacer_seq) . "\t$spacer_seq\t$spacer_in_read\n";
-				#}
 			}
 		}
 
@@ -192,7 +177,7 @@ while( <F1> ) {
 			if( &compare_seq($remaining_spacer, $spacer_in_read) ) {
 				$determined = 1;
 	
-				# Not case 1:
+				# good case:
 				if( $remaining_read >= $min) {
 					my $print_seq2  = substr($seq2, 0, $remaining_read);
 					my $print_qual2 = substr($qual2, 0, $remaining_read);
@@ -202,9 +187,6 @@ while( <F1> ) {
 
 					#print "$& $'\t" . length($&) . "\t$cut_spacer\t$remaining_read\t$remaining_spacer\t$spacer_in_read\n";
 				}
-				#else {
-				#	print "$& $'\t" . length($&) . "\t$cut_spacer\t$remaining_read\t$remaining_spacer\t$spacer_in_read\n";
-				#}
 			}
 		}
 	}
@@ -214,7 +196,6 @@ while( <F1> ) {
 
 		print O1 "$sh1$seq1\n$qh1$qual1\n";
 		print O2 "$sh2$seq2\n$qh2$qual2\n";
-		#print "$sh1$sh2";
 	}
 }
 
@@ -223,6 +204,8 @@ close F2;
 close O1;
 close O2;
 
+
+# compare two sequences base by base
 sub compare_seq {
 
 	my ($seq1, $seq2) = @_;
@@ -251,18 +234,17 @@ sub compare_seq {
 	}
 }
 
-# sub min ($$) { $_[$_[0] > $_[1]] }
 
-
-# sub max ($$) { $_[$_[0] < $_[1]] }
-
-
+# Quality filter (not implemented)
 sub quality_filter {
 	my ($seq, $qual) = @_;
 
 }
 
 exit(0);
+
+
+
 
 ### Jumping libraries and spacers
 # Read: ====>

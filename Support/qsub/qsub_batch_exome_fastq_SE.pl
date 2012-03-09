@@ -33,6 +33,7 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--namestart \t  start of a substring in the read file name (first letter is numbered 0) \n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--readextension \t describes the name of the read files (e.g. fastq.gz)\n",
+	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
 	   "--help \t\t show help \n";
 	   
 	   }
@@ -44,9 +45,10 @@ my $max_cov;
 my $nameStart;
 my $nameLength;
 my $readextension;
+my $cpu = 8;
 my $help = 0;
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "help=s" => \$help);
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "cpu=i" => \$cpu, "help=s" => \$help);
 
 unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $readextension && $help == 0) {
 	usage;
@@ -111,7 +113,7 @@ NGSBOX=/users/GD/tools/ngsbox
 
 
 ### Align reads with bwa
-\$BWA aln -k 2 -i 5 -q -1 -t 10 -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
+\$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
 
 
 ### Correct paired end files
@@ -170,7 +172,7 @@ fi
 if [ -s \$OUTF/\$NAME.realigned.dm.bam ];
 then
    echo Base quality recalibration
-   java -Xmx4g -jar \$GATK -T CountCovariates -nt 8 --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf
+   java -Xmx4g -jar \$GATK -T CountCovariates -nt $cpu --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf
    java -Xmx4g -jar \$GATK -T TableRecalibration --default_platform illumina -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -recalFile \$OUTF/recal_data.csv --out \$OUTF/\$NAME.realigned.dm.recalibrated.bam
 else
    echo \$NAME.realigned.dm.bam not found
@@ -188,8 +190,8 @@ rm \$OUTF/\$NAME.realigned.bai
 if [ -s \$OUTF/\$NAME.realigned.dm.recalibrated.bam ];
 then
    echo GATK: Call SNPs and Indels with the GATK Unified Genotyper
-   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
-   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt 8 -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
 else
    echo \$NAME.realigned.dm.recalibrated.bam not found
    exit
