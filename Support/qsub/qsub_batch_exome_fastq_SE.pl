@@ -113,7 +113,7 @@ NGSBOX=/users/GD/tools/ngsbox
 
 
 ### Align reads with bwa
-\$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
+ \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
 
 
 ### Correct paired end files
@@ -245,11 +245,34 @@ fi
 
 
 
-### SHORE: Enrichment plot
+### SHORE: Enrichment plots
 grep enriched \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_enriched.txt
 grep depleted \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_depleted.txt
 grep enriched \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_enriched.txt
 grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_depleted.txt
+### plot data
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus150/
+
+grep enriched \$OUTF/shore/Count_SureSelect_plus0/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus0/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_depleted.txt
+grep enriched \$OUTF/shore/Count_SureSelect_plus0/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_count_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus0/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_count_depleted.txt
+### plot data
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus0/
+
+grep enriched \$OUTF/shore/Count_SureSelect_plus50/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus50/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_depleted.txt
+grep enriched \$OUTF/shore/Count_SureSelect_plus50/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_count_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus50/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_count_depleted.txt
+### plot data
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus50/
+
+grep enriched \$OUTF/shore/Count_SureSelect_plus100/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus100/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_depleted.txt
+grep enriched \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_count_enriched.txt
+grep depleted \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_count_depleted.txt
+### plot data
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus100/
 
 
 
