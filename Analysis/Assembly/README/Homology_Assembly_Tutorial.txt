@@ -156,13 +156,13 @@ velvetg velvet_assembly -scaffolding no -min_contig_lgth 100 -cov_cutoff 4 -max_
 
 
 -----------------------------------------------------------------------------
-Validation
+Improve Assembly using re-alignment of Illumina reads
 -----------------------------------------------------------------------------
 
 shore consensus -n BH -f ../../../../index/contigs.fasta.shore -o Analysis_q01 -i map.list -a ~/shore/Analysis/scoring_matrices/scoring_matrix_hom.txt -b 0.55 -v
 
-perl ~/pgsp/Support/Assembly/validate_assembly.pl 20 1000 10 10000 4 ../../../../../../contigs.fasta ../../../../../../contigs.layout supplementary_data/unseq_core.txt homozygous_snp.txt deletion.txt insertion.txt > validated_contigs.fa
-perl ~/pgsp/Support/Assembly/select_contigs.pl ...
+perl ~/ngsbox/Analysis/Assembly/Scaffolding/validate_assembly.pl 20 1000 10 10000 4 contigs.fasta contigs.layout unseq_core.txt homozygous_snp.txt deletion.txt insertion.txt > validated_contigs.fa
+perl ~/ngsbox/Analysis/Assembly/Scaffolding/select_contigs.pl ...
 
 dottup -sreverse1 T test.fa ../../abyss_4/superblock_25/test.fa
 

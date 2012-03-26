@@ -1,0 +1,33 @@
+-----------------------------------------------------------------------------
+Improve AllpathsLG Assembly using re-alignment of Illumina reads
+-----------------------------------------------------------------------------
+
+shore consensus -n BH -f contigs.fasta.shore -o Analysis -i map.list -a ~/shore/Analysis/scoring_matrices/scoring_matrix_hom.txt -b 0.55 -v
+
+perl ~/ngsbox/Analysis/Assembly/Scaffolding/validate_assembly.pl 20 1000 10 10000 4 contigs.fasta contigs.layout unseq_core.txt homozygous_snp.txt deletion.txt insertion.txt > validated_contigs.fa
+
+perl ~/ngsbox/Analysis/Assembly/Scaffolding/select_contigs.pl ...
+
+dottup -sreverse1 T test.fa ../../abyss_4/superblock_25/test.fa
+
+
+
+-----------------------------------------------------------------------------
+Improve AllpathsLG Assembly using contigs from other assemblers
+-----------------------------------------------------------------------------
+#TODO
+
+
+
+-----------------------------------------------------------------------------
+Improve AllpathsLG Assembly using homology to the reference
+-----------------------------------------------------------------------------
+#TODO
+
+
+
+-----------------------------------------------------------------------------
+Improve AllpathsLG Assembly using PacBio reads
+-----------------------------------------------------------------------------
+#TODO
+
