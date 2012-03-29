@@ -19,7 +19,7 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Analysis::Assembly::QualityCaller::call_ctg_quality_new.pl
+#  Module: Analysis::Assembly::QualityCaller::assign_ctg_base_quality_vcf.pl
 #  Purpose:
 #  In:
 #  Out:
@@ -27,19 +27,21 @@ use warnings;
 
 
 
-my $usage = "\n$0 scaffold_file quality_reference_file quality_variant_file qual_filename masked_filename\n\n";
+my $usage = "\n$0 scaffold_file quality_reference_file snp_vcf indel_vcf qual_filename masked_filename\n\n";
 
-my $s_file = shift or die $usage;
-my $r_file = shift or die $usage;
-my $v_file = shift or die $usage;
-my $q_file = shift or die $usage;
-my $m_file = shift or die $usage;
+my $s_file  = shift or die $usage;
+my $r_file  = shift or die $usage;
+my $snp_vcf = shift or die $usage;
+my $ind_vcf = shift or die $usage;
+my $q_file  = shift or die $usage;
+my $m_file  = shift or die $usage;
 
 
 # Input
 open SFILE, $s_file or die "Cannot open file ".$s_file."\n";
 open RFILE, $r_file or die "Cannot open file ".$r_file."\n";
-open VFILE, $v_file or die "Cannot open file ".$v_file."\n";
+open SNPVCF, $snp_vcf or die "Cannot open file ".$snp_vcf."\n";
+open INDVCF, $ind_vcf or die "Cannot open file ".$ind_vcf."\n";
 
 # Output
 open QFILE, ">".$q_file or die "Cannot open file ".$q_file."\n";
@@ -57,16 +59,16 @@ my %QVAR = ();
 # Adjustable parameter
 
 # what variation are considered:
-my $min_var_freq = 0.25;
-my $min_var_support = 3;
+my $min_var_freq = 0.2;
+my $min_var_support = 2;
 
 # how to treat ambiguous positions
-my $N_extension = 5;
-my $N_gap_closing_size = 25;
+my $N_extension = 10;
+my $N_gap_closing_size = 100;
 
 # quality parameters
-my $masking_threshold = 1;
-my $min_high_qual_calls = 5000;
+my $masking_threshold = 15;
+my $min_high_qual_calls = 300;
 
 
 
@@ -75,6 +77,7 @@ my $min_high_qual_calls = 5000;
 
 my $passed_scaffolds = 0;
 my $dismissed_scaffolds = 0;
+my $dismissed500_scaffolds = 0;
 
 my $N_passed_scaffold = 0;
 my $N_passed_masked_qual = 0;
@@ -90,15 +93,22 @@ my $N_dismissed_masked_2 = 0;
 my $N_dismissed_masked_3 = 0;
 my $N_dismissed_masked_4 = 0;
 
+my $N_dismissed500_scaffold = 0;
+my $N_dismissed500_masked_qual = 0;
+my $N_dismissed500_masked_1 = 0;
+my $N_dismissed500_masked_2 = 0;
+my $N_dismissed500_masked_3 = 0;
+my $N_dismissed500_masked_4 = 0;
+
 
 
 #####################################
-# Read in quality ref
-print STDERR "Reading ref qual...\n";
-while (my $l = <RFILE>) {
-	my @a = split " ", $l;
+# Parse reference calls
+print STDERR "Reading ref calls...\n";
+while (<RFILE>) {
+	my @a = split("\t", $_);
 	$a[1] =~ s/scaffold_//;
-	$QREF{$a[1]."#".$a[2]} = $a[5]; 
+	$QREF{$a[1]."#".$a[2]} = $a[5];
 }
 close RFILE;
 print STDERR "done.\n";
@@ -106,16 +116,85 @@ print STDERR "done.\n";
 
 
 #####################################
-# Read in quality var
-print STDERR "Reading var qual...\n";
-while (my $l = <VFILE>) {
-        my @a = split " ", $l;
-	if ($a[7] >= $min_var_freq and $a[6] >= $min_var_support) {
+# Parse SNPs
+print STDERR "Reading SNP vcf...\n";
+while (<SNPVCF>) {
+
+	chomp;
+
+        my @a = split("\t", $_);
+	my @b = split(";", $a[7]);	# Annotations
+	my @c = split(":", $a[8]);      # Genotypes order
+	my @d = split(":", $a[9]);      # Genotypes values
+
+	# Get annotation
+	my %anno = ();
+	foreach my $anno_string (@b) {
+		my($type, $value) = split("=", $anno_string);
+		$anno{$type} = $value;
+	}
+
+	### Get genotype
+	my %geno = ();
+	for(my $i = 0; $i < $#c; $i++) {
+		$geno{$c[$i]} = $d[$i];
+	}
+
+	my ($ref_support, $snp_support) = split(",", $geno{AD});
+	my $allele_freq = 1;
+	if( $ref_support > 0) {
+		$allele_freq = $snp_support / $ref_support;
+	}
+
+	if ($allele_freq >= $min_var_freq and $snp_support >= $min_var_support) {
 	        $a[1] =~ s/scaffold_//;
-        	$QVAR{$a[1]."#".$a[2]} = $a[5];
+        	$QVAR{$a[0]."#".$a[1]} = $a[5];
 	}
 }
-close VFILE;
+close SNPVCF;
+print STDERR "done.\n";
+
+
+
+#####################################
+# Parse Indels
+print STDERR "Reading indel vcf...\n";
+while (<INDVCF>) {
+
+	chomp;
+
+	my @a = split("\t", $_);
+	my @b = split(";", $a[7]);      # Annotations
+	my @c = split(":", $a[8]);      # Genotypes order
+	my @d = split(":", $a[9]);      # Genotypes values
+
+	# Get annotation
+	my %anno = ();
+	foreach my $anno_string (@b) {
+		my($type, $value) = split("=", $anno_string);
+		$anno{$type} = $value;
+	}
+
+	### Get genotype
+	my %geno = ();
+	for(my $i = 0; $i < $#c; $i++) {
+		$geno{$c[$i]} = $d[$i];
+	}
+	
+	# Read support and allele frequency
+	my ($ref_support, $snp_support) = split(",", $geno{AD});
+	my $allele_freq = 1;
+	if( $ref_support > 0) {
+		$allele_freq = $snp_support / $ref_support; 
+	}
+
+	# Store
+	if ($allele_freq >= $min_var_freq and $snp_support >= $min_var_support) {
+		$a[1] =~ s/scaffold_//;
+		$QVAR{$a[0]."#".$a[1]} = $a[5];
+	}
+}
+close INDVCF;
 print STDERR "done.\n";
 
 
@@ -128,7 +207,6 @@ while (my $l = <SFILE>) {
 	chomp($l);
 	if (substr($l, 0, 1) eq ">") {
 		if ($seq ne "") {
-			print STDERR "main: $id\n";
 			parse_scaff($id, $seq);
 		}
 		$seq = "";
@@ -139,7 +217,6 @@ while (my $l = <SFILE>) {
 	}
 }
 if ($seq ne "") {
-	print STDERR "main: $id\n";
 	parse_scaff($id, $seq);
 }
 
@@ -165,13 +242,21 @@ print STDERR "N masked 2:\t\t$N_dismissed_masked_2\n";
 print STDERR "N masked 3:\t\t$N_dismissed_masked_3\n";
 print STDERR "N masked 4:\t\t$N_dismissed_masked_4\n";
 
+print STDERR "Scaffolds dismissed500:\n";
+print STDERR "#:\t", $dismissed500_scaffolds, "\n";
+print STDERR "N scaffold:\t\t$N_dismissed500_scaffold\n";
+print STDERR "N masked qual:\t\t$N_dismissed500_masked_qual\n";
+print STDERR "N masked 1:\t\t$N_dismissed500_masked_1\n";
+print STDERR "N masked 2:\t\t$N_dismissed500_masked_2\n";
+print STDERR "N masked 3:\t\t$N_dismissed500_masked_3\n";
+print STDERR "N masked 4:\t\t$N_dismissed500_masked_4\n";
+
 exit(0);
 
 
 
 #####################################
-# parse 
-
+# Parse scaffold file
 sub parse_scaff {
 	my ($id, $seq) = @_;	
 
@@ -182,9 +267,7 @@ sub parse_scaff {
 	# set short id
         my @a = split " ", $id;
         my $srt_id = substr($a[0], 1, length($a[0])-1);
-        $srt_id =~ s/scaffold_//;
-
-	print STDERR "parse_scaff: $srt_id\n";
+        $srt_id =~ s/Scaffold_//;
 
 	# calculate per base quality
 	# N = 0
@@ -205,6 +288,8 @@ sub parse_scaff {
 	# Print
 	# mask by quality missing... ($masking_threshold) (Im print erst?)
 	print_seq(\@seq, \@qual);
+
+
 }
 
 
@@ -247,6 +332,7 @@ sub print_seq_debug {
 	print MFILE "\n";
 
 }
+
 
 sub print_seq {
         my ($seq_ref, $qual_ref) = @_;
@@ -341,22 +427,25 @@ sub print_seq {
 	}
 	else {
 		$dismissed_scaffolds++;
+		$dismissed500_scaffolds++ if @{$seq_ref} >= 500;
 		print QFILE_DISM "$id\n";
 		print MFILE_DISM "$id\n";
 		my $pos_c = 0;
                 if ($end > $begin) {
                         $N_dismissed_masked_4 += (@{$seq_ref} - $end) + ($begin - 1);
+			$N_dismissed500_masked_4 += (@{$seq_ref} - $end) + ($begin - 1) if @{$seq_ref} >= 500;
                 }
                 else {
                         $N_dismissed_masked_4 += @{$seq_ref}+0;
+                        $N_dismissed_masked_4 += @{$seq_ref}+0 if @{$seq_ref} >= 500;
                 }
 		for (my $i = $begin; $i < $end; $i++) {
 			if (${$seq_ref}[$i] eq "N") {
                                 $N_dismissed_scaffold++;
+                                $N_dismissed500_scaffold++ if @{$seq_ref} >= 500;
                         }
 			if (${$qual_ref}[$i] != -4) {
-
-				# line breaks
+				# lines breaks
 				if ($pos_c!=0 and ($pos_c % 40) == 0) {
 					print QFILE_DISM "\n";			
 				}
@@ -379,15 +468,19 @@ sub print_seq {
 					if (${$seq_ref}[$i] ne "N") {
                                                 if (${$qual_ref}[$i] >= 0) {
                                                         $N_dismissed_masked_qual++;
+							$N_dismissed500_masked_qual++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -1) {
                                                         $N_dismissed_masked_1++;
+							$N_dismissed500_masked_1++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -2) {
                                                         $N_dismissed_masked_2++;
+                                                        $N_dismissed500_masked_2++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -3) {
                                                         $N_dismissed_masked_3++;
+                                                        $N_dismissed500_masked_3++ if @{$seq_ref} >= 500;
                                                 }
                                         }
                                         print MFILE_DISM "N";
@@ -444,7 +537,6 @@ sub extend_combine_low_quality_regions {
 		}
 	}
 
-
 	# Close gaps between Ns
 	my $last_n = -1;
 	for (my $i = 0; $i <= @{$seq_ref}; $i++) {
@@ -485,7 +577,6 @@ sub mask_by_quality_region {
 		else {
 		}
 	}
-
 }
 
 
@@ -503,7 +594,6 @@ sub mask_by_quality_contig {
 		if (${$seq_ref}[$i] eq "N") {
 			if ($start != -1) {
 				if ($count_quality_bases < 20 or $count_quality_bases/$count_bases <= 0.2) {
-					
 					# last region had to little high quality values => mask it (= set quality to -1)
 					for (my $j = $start; $j <= $i-1; $j++) {
 						if (${$qual_ref}[$j] > 0) {
@@ -521,7 +611,6 @@ sub mask_by_quality_contig {
 			if ($start == -1) {
 				$start = $i;
 			}
-
 			# Is it a good or a bad base?
 			if (${$qual_ref}[$i] >= 25) {
 				$count_quality_bases++;
@@ -558,6 +647,7 @@ sub set_quality {
                         else {
                                 $qual = 0;
                         }
+
                         # set quality
                         ${$qual_ref}[$i] = $qual;
                 }
@@ -570,3 +660,4 @@ sub max {
 	return $a if $a >= $b;
 	return $b;
 }
+

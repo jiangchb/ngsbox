@@ -37,11 +37,10 @@ my $min_bp_per_mm    = shift or die $usage;	# Filter threashold: mismatches per 
 my $max_obs_exp_cov  = shift or die $usage;	# Filter threashold: Maximum ratio of observed to expected coverage
 
 my $contig_file    = shift or die $usage;	# fasta file with assembled contigs
-my $config_file    = shift or die $usage;	# config file of 'shore consensus'
-my $unseq_file     = shift or die $usage;	# unsequenced file of 'shore consensus'
-my $snp_file       = shift or die $usage;	# SNP file of 'shore consensus'
-my $deletion_file  = shift or die $usage;	# Deletion file of 'shore consensus'
-my $insertion_file = shift or die $usage;	# Insertion file of 'shore consensus'
+my $config_file    = shift or die $usage;	# config file of 'shore qvar'
+my $unseq_file     = shift or die $usage;	# unsequenced file of 'shore qvar'
+my $snp_file       = shift or die $usage;	# SNP VCF file
+my $indel_file     = shift or die $usage;	# Indel VCF file
 
 
 ### Init containers
@@ -66,7 +65,6 @@ while(<CONTIG>) {
 
 	if (substr($_, 0, 1) eq ">") {
 		$id = substr($_, 1);
-		$id =~ s/scaffold_//g;
 	}
 	else {
 		$ctg_seq{$id} .= $_;
@@ -101,7 +99,6 @@ while(<CONFIG>) {
 		# get contig id
 		my ($id, $value) = split(": ", $_);
 		$id =~ s/DEPTH CHR-//g;
-		$id--;
 		
 		# split values
 		my($unique_bases_sequenced, $unique_positions, $unique_depth) = split(/ .{1} /, $value);
@@ -113,15 +110,14 @@ while(<CONFIG>) {
 		# get contig id
 		my ($id, $readcount) = split(": ", $_);
 		$id =~ s/UNIQUE READS CHR-//g;
-		$id--;
 		$ctg_unique_readcount{$id} = $readcount;
 	}
 
 	elsif(substr($_, 0, 15) eq "TOTAL READS CHR") {
 		my ($id, $readcount) = split(": ", $_);
 		$id =~ s/TOTAL READS CHR-//g;
-		$id--;
 		$ctg_readcount{$id} = $readcount;
+		print "TR: $id, " . $ctg_readcount{$id} . "\n";
 	}
 }
 
@@ -141,7 +137,7 @@ open UNSEQ, $unseq_file or die "Cannot open $unseq_file\n";
 while( <UNSEQ> ) {
 
 	my @a = split("\t", $_);
-	my $id = $a[1];
+	my $id = $a[0];
 	$id =~ s/scaffold_//g;
 
 	if(! exists $unseq_N{$id} ) {
@@ -151,14 +147,14 @@ while( <UNSEQ> ) {
 		$splitter{$id} = \@tmp2;
 	}
 
-	if( ($a[2] > $trim_len) && ($a[3] < ($ctg_len{$id} - $trim_len)) ) {
-		my $unseq_seq = substr($ctg_seq{$id}, $a[2] - 1, $a[3] - $a[2] + 1);
+	if( ($a[1] > $trim_len) && ($a[2] < ($ctg_len{$id} - $trim_len)) ) {
+		my $unseq_seq = substr($ctg_seq{$id}, $a[1] - 1, $a[2] - $a[1] + 1);
 
 		if($unseq_seq =~ /N/) {
-			push( @{$unseq_N{$id}}, "$a[2]-$a[3]" );
+			push( @{$unseq_N{$id}}, "$a[1]-$a[2]" );
 		}
 		else {
-			push( @{$splitter{$id}}, "$a[2]-$a[3]" );
+			push( @{$splitter{$id}}, "$a[1]-$a[2]" );
 		}
 	}
 }
@@ -167,76 +163,77 @@ while( <UNSEQ> ) {
 ### Parse SNPs
 open SNP, $snp_file or die "Cannot open $snp_file\n";
 while( <SNP> ) {
-	my @a = split("\t", $_);
-	my $id = $a[1];
-	$id =~ s/scaffold_//g;
 
-	if(! exists $snp{$id} ) {
-		my %tmp = ();
-		$snp{$id} = \%tmp;
-	}
+	if( substr($_,0,1) ne "#") {
 
-	# Do not count in trimming range
-	if( ($a[2] > $trim_len) && ($a[2] < ($ctg_len{$id} - $trim_len)) ) {
+		my @a = split("\t", $_);
+		my $id = $a[0];
+		$id =~ s/scaffold_//g;
 
-		# check IUPAC code of contig
-		if( ($a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T") && ($a[4] ne "-") ) {
-		
-			# Select high quality SNPs 
-			if($a[5] >= 30 && $a[7] >= 0.4) {
-				$snp{$id}{$a[2]} = 1;
+		if(! exists $snp{$id} ) {
+			my %tmp = ();
+			$snp{$id} = \%tmp;
+		}
+
+		# Do not count in trimming range
+		if( ($a[1] > $trim_len) && ($a[1] < ($ctg_len{$id} - $trim_len)) ) {
+
+			# check IUPAC code of contig
+			if( ($a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T") && ($a[4] ne "-") ) {
+			
+				# Select high quality SNPs
+				if($a[5] >= 30 && $a[7] >= 0.4) {
+					$snp{$id}{$a[1]} = 1;
+				}
 			}
 		}
 	}
 }
 
 
-### Parse small deletions
-open DELETION, $deletion_file or die "Cannot open $deletion_file\n";
-while( <DELETION> ) {
-        my @a = split("\t", $_);
-	my $id = $a[1];
-	$id =~ s/scaffold_//g;
+### Parse small indels
+open INDEL, $indel_file or die "Cannot open $indel_file\n";
+while( <INDEL> ) {
 
-	if(! exists $splitter{$id} ) {
-		my @tmp = ();
-		$splitter{$id} = \@tmp;
-	}
+	if( substr($_,0,1) ne "#") {
 
-	if( ($a[2] > $trim_len) && ($a[3] < ($ctg_len{$id} - $trim_len)) ) {
-		push( @{$splitter{$id}}, "$a[2]-$a[3]");
-	}
-}
+	        my @a = split("\t", $_);
+		my $id = $a[0];
+		$id =~ s/scaffold_//g;
 
+		if(! exists $splitter{$id} ) {
+			my @tmp = ();
+			$splitter{$id} = \@tmp;
+		}
 
-### Parse small insertions
-open INSERTION, $insertion_file or die "Cannot open $insertion_file\n";
-while( <INSERTION> ) {
-        my @a = split("\t", $_);
-	my $id = $a[1];
-	$id =~ s/scaffold_//g;
+		if( ($a[1] > $trim_len) && ($a[1] < ($ctg_len{$id} - $trim_len)) ) {
+		
+			# calculate start and end position
+			my $beg = $a[3];
+			my $end = $a[3] + 1;
 
-	if(! exists $splitter{$id} ) {
-		my @tmp = ();
-		$splitter{$id} = \@tmp;
-	}
+			if( length($a[3]) > length($a[4]) ) {	# deletion
+				$end = $beg + length($a[4]);
+				$beg++;
+			}
 
-	if( ($a[2] > $trim_len) && ($a[3] < ($ctg_len{$id} - $trim_len)) ) {
-		push( @{$splitter{$id}}, "$a[2]-$a[3]");
+			push( @{$splitter{$id}}, "$beg-$end");
+		}
 	}
 }
 
 
-# Split gapped contigs
+# Mask sequence around gaps
 foreach $id ( keys %splitter ) {
 	my %split_locus = ();
 
 	foreach my $locus ( @{$splitter{$id}} ) {
-		my ($s, $e) = split("-", $locus);
-		$s -= 20; $e += 20;
-		for(my $i = $s; $i <= $e; $i++) {
+		my ($beg, $end) = split("-", $locus);
+		$beg -= 20; $end += 20;
+
+		for(my $i = $beg; $i <= $end; $i++) {
 			substr($ctg_seq{$id}, $i-1, 1, "N");
-			push( @{$unseq_N{$id}}, "$s-$e" );
+			push( @{$unseq_N{$id}}, "$beg-$end" );
 			delete $snp{$id}{$i};
 		}
 	}
@@ -245,7 +242,6 @@ foreach $id ( keys %splitter ) {
 
 ### Validate
 foreach $id (sort {$a<=>$b} keys %ctg_seq) {
-	
 	my $remapping_mm =  scalar( keys %{$snp{$id}} );
 
 	# Remove low read count contigs
@@ -255,12 +251,8 @@ foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 	}
 
 	# Remove bad coverage contigs
-	elsif(	($ctg_unique_depth{$id} > 0) &&
-		(
-		  (($ctg_unique_depth{$id} / $genome_unique_depth) >= $max_obs_exp_cov) ||
-		  #(($genome_unique_depth / $ctg_unique_depth{$id}) >= $max_obs_exp_cov)
-		  ($ctg_unique_depth{$id} < 5)
-		)
+	elsif(	(($ctg_depth{$id} / $genome_depth) >= $max_obs_exp_cov) ||
+		(($genome_depth / $ctg_depth{$id}) >= $max_obs_exp_cov)
 	){
 		delete $ctg_seq{$id};
 		print STDERR "BAD COVERAGE: $id\t" . $ctg_len{$id} . "\t" . $ctg_depth{$id} . "\n";
@@ -283,7 +275,7 @@ foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 ### Print validated contigs
 my $total_genome_coverage = 0;
 foreach $id (sort {$a<=>$b} keys %ctg_seq) {
-	
+
 	$ctg_len{$id} -= (2 * $trim_len);
 	$total_genome_coverage += $ctg_len{$id};
 	my $trimmed_contig = substr($ctg_seq{$id}, $trim_len, $ctg_len{$id});
