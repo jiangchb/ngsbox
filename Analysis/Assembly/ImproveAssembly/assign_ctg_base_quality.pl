@@ -128,7 +128,6 @@ while (my $l = <SFILE>) {
 	chomp($l);
 	if (substr($l, 0, 1) eq ">") {
 		if ($seq ne "") {
-			print STDERR "main: $id\n";
 			parse_scaff($id, $seq);
 		}
 		$seq = "";
@@ -139,7 +138,6 @@ while (my $l = <SFILE>) {
 	}
 }
 if ($seq ne "") {
-	print STDERR "main: $id\n";
 	parse_scaff($id, $seq);
 }
 
@@ -170,8 +168,7 @@ exit(0);
 
 
 #####################################
-# parse 
-
+# parse scaffolds
 sub parse_scaff {
 	my ($id, $seq) = @_;	
 
@@ -183,8 +180,6 @@ sub parse_scaff {
         my @a = split " ", $id;
         my $srt_id = substr($a[0], 1, length($a[0])-1);
         $srt_id =~ s/scaffold_//;
-
-	print STDERR "parse_scaff: $srt_id\n";
 
 	# calculate per base quality
 	# N = 0
@@ -208,6 +203,8 @@ sub parse_scaff {
 }
 
 
+#####################################
+# Debugging
 sub print_seq_debug {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -248,6 +245,9 @@ sub print_seq_debug {
 
 }
 
+
+############################################
+# Print improved scaffolds and quality files
 sub print_seq {
         my ($seq_ref, $qual_ref) = @_;
 
@@ -311,6 +311,7 @@ sub print_seq {
 				else {
 					print QFILE ${$qual_ref}[$i]." ";
 				}
+
 				# seq
 				if (${$qual_ref}[$i]<$masking_threshold) {
 					if (${$seq_ref}[$i] ne "N") {
@@ -405,6 +406,9 @@ sub print_seq {
 }
 
 
+###############################################
+# Extend stretches of N bu a few bases
+# Merge stretches of Ns in close vicinity
 sub extend_combine_low_quality_regions {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -443,7 +447,6 @@ sub extend_combine_low_quality_regions {
 			$last_pos = -2;
 		}
 	}
-
 
 	# Close gaps between Ns
 	my $last_n = -1;
@@ -485,13 +488,11 @@ sub mask_by_quality_region {
 		else {
 		}
 	}
-
 }
 
 
-# Search for contigs in scaffolds that should be taken out. The scaffolding
-# should be broken(?)
-# This sets the regions that shall be broken to -1 in the quality string
+# Search for contigs in scaffolds that should be taken out.
+# This sets the regions to be masked to -1 in the quality string
 sub mask_by_quality_contig {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -532,6 +533,7 @@ sub mask_by_quality_contig {
 }
 
 
+# Calculate the quality of a position in a scaffold
 sub set_quality {
 	my ($srt_id, $seq_ref, $qual_ref) = @_;
 

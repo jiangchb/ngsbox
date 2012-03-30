@@ -59,16 +59,16 @@ my %QVAR = ();
 # Adjustable parameter
 
 # what variation are considered:
-my $min_var_freq = 0.2;
-my $min_var_support = 2;
+my $min_var_freq = 0.25;
+my $min_var_support = 3;
 
 # how to treat ambiguous positions
-my $N_extension = 10;
-my $N_gap_closing_size = 100;
+my $N_extension = 5;
+my $N_gap_closing_size = 25;
 
 # quality parameters
-my $masking_threshold = 15;
-my $min_high_qual_calls = 300;
+my $masking_threshold = 1;
+my $min_high_qual_calls = 5000;
 
 
 
@@ -77,7 +77,6 @@ my $min_high_qual_calls = 300;
 
 my $passed_scaffolds = 0;
 my $dismissed_scaffolds = 0;
-my $dismissed500_scaffolds = 0;
 
 my $N_passed_scaffold = 0;
 my $N_passed_masked_qual = 0;
@@ -92,13 +91,6 @@ my $N_dismissed_masked_1 = 0;
 my $N_dismissed_masked_2 = 0;
 my $N_dismissed_masked_3 = 0;
 my $N_dismissed_masked_4 = 0;
-
-my $N_dismissed500_scaffold = 0;
-my $N_dismissed500_masked_qual = 0;
-my $N_dismissed500_masked_1 = 0;
-my $N_dismissed500_masked_2 = 0;
-my $N_dismissed500_masked_3 = 0;
-my $N_dismissed500_masked_4 = 0;
 
 
 
@@ -146,8 +138,12 @@ while (<SNPVCF>) {
 		$allele_freq = $snp_support / $ref_support;
 	}
 
-	if ($allele_freq >= $min_var_freq and $snp_support >= $min_var_support) {
-	        $a[1] =~ s/scaffold_//;
+	if (($allele_freq >= $min_var_freq) && 
+	    ($snp_support >= $min_var_support) && 
+	    ($a[6] eq "PASS") && 
+	    ($a[3] eq 'A' || $a[3] eq 'C' || $a[3] eq 'G' || $a[3] eq 'T')
+	) {
+	        $a[0] =~ s/scaffold_//;
         	$QVAR{$a[0]."#".$a[1]} = $a[5];
 	}
 }
@@ -182,15 +178,15 @@ while (<INDVCF>) {
 	}
 	
 	# Read support and allele frequency
-	my ($ref_support, $snp_support) = split(",", $geno{AD});
+	my ($ref_support, $indel_support) = split(",", $geno{AD});
 	my $allele_freq = 1;
 	if( $ref_support > 0) {
-		$allele_freq = $snp_support / $ref_support; 
+		$allele_freq = $indel_support / $ref_support; 
 	}
 
 	# Store
-	if ($allele_freq >= $min_var_freq and $snp_support >= $min_var_support) {
-		$a[1] =~ s/scaffold_//;
+	if ($allele_freq >= $min_var_freq && $indel_support >= $min_var_support && $a[6] eq "PASS") {
+		$a[0] =~ s/scaffold_//;
 		$QVAR{$a[0]."#".$a[1]} = $a[5];
 	}
 }
@@ -207,6 +203,7 @@ while (my $l = <SFILE>) {
 	chomp($l);
 	if (substr($l, 0, 1) eq ">") {
 		if ($seq ne "") {
+			print STDERR "main: $id\n";
 			parse_scaff($id, $seq);
 		}
 		$seq = "";
@@ -217,6 +214,7 @@ while (my $l = <SFILE>) {
 	}
 }
 if ($seq ne "") {
+	print STDERR "main: $id\n";
 	parse_scaff($id, $seq);
 }
 
@@ -242,15 +240,6 @@ print STDERR "N masked 2:\t\t$N_dismissed_masked_2\n";
 print STDERR "N masked 3:\t\t$N_dismissed_masked_3\n";
 print STDERR "N masked 4:\t\t$N_dismissed_masked_4\n";
 
-print STDERR "Scaffolds dismissed500:\n";
-print STDERR "#:\t", $dismissed500_scaffolds, "\n";
-print STDERR "N scaffold:\t\t$N_dismissed500_scaffold\n";
-print STDERR "N masked qual:\t\t$N_dismissed500_masked_qual\n";
-print STDERR "N masked 1:\t\t$N_dismissed500_masked_1\n";
-print STDERR "N masked 2:\t\t$N_dismissed500_masked_2\n";
-print STDERR "N masked 3:\t\t$N_dismissed500_masked_3\n";
-print STDERR "N masked 4:\t\t$N_dismissed500_masked_4\n";
-
 exit(0);
 
 
@@ -267,7 +256,9 @@ sub parse_scaff {
 	# set short id
         my @a = split " ", $id;
         my $srt_id = substr($a[0], 1, length($a[0])-1);
-        $srt_id =~ s/Scaffold_//;
+        $srt_id =~ s/scaffold_//;
+
+	print STDERR "parse_scaff: $srt_id\n";
 
 	# calculate per base quality
 	# N = 0
@@ -288,11 +279,11 @@ sub parse_scaff {
 	# Print
 	# mask by quality missing... ($masking_threshold) (Im print erst?)
 	print_seq(\@seq, \@qual);
-
-
 }
 
 
+#####################################
+# Debugging
 sub print_seq_debug {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -334,6 +325,8 @@ sub print_seq_debug {
 }
 
 
+############################################
+# Print improved scaffolds and quality files
 sub print_seq {
         my ($seq_ref, $qual_ref) = @_;
 
@@ -397,6 +390,7 @@ sub print_seq {
 				else {
 					print QFILE ${$qual_ref}[$i]." ";
 				}
+
 				# seq
 				if (${$qual_ref}[$i]<$masking_threshold) {
 					if (${$seq_ref}[$i] ne "N") {
@@ -427,24 +421,21 @@ sub print_seq {
 	}
 	else {
 		$dismissed_scaffolds++;
-		$dismissed500_scaffolds++ if @{$seq_ref} >= 500;
 		print QFILE_DISM "$id\n";
 		print MFILE_DISM "$id\n";
 		my $pos_c = 0;
                 if ($end > $begin) {
                         $N_dismissed_masked_4 += (@{$seq_ref} - $end) + ($begin - 1);
-			$N_dismissed500_masked_4 += (@{$seq_ref} - $end) + ($begin - 1) if @{$seq_ref} >= 500;
                 }
                 else {
                         $N_dismissed_masked_4 += @{$seq_ref}+0;
-                        $N_dismissed_masked_4 += @{$seq_ref}+0 if @{$seq_ref} >= 500;
                 }
 		for (my $i = $begin; $i < $end; $i++) {
 			if (${$seq_ref}[$i] eq "N") {
                                 $N_dismissed_scaffold++;
-                                $N_dismissed500_scaffold++ if @{$seq_ref} >= 500;
                         }
 			if (${$qual_ref}[$i] != -4) {
+
 				# lines breaks
 				if ($pos_c!=0 and ($pos_c % 40) == 0) {
 					print QFILE_DISM "\n";			
@@ -468,19 +459,15 @@ sub print_seq {
 					if (${$seq_ref}[$i] ne "N") {
                                                 if (${$qual_ref}[$i] >= 0) {
                                                         $N_dismissed_masked_qual++;
-							$N_dismissed500_masked_qual++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -1) {
                                                         $N_dismissed_masked_1++;
-							$N_dismissed500_masked_1++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -2) {
                                                         $N_dismissed_masked_2++;
-                                                        $N_dismissed500_masked_2++ if @{$seq_ref} >= 500;
                                                 }
                                                 elsif (${$qual_ref}[$i] == -3) {
                                                         $N_dismissed_masked_3++;
-                                                        $N_dismissed500_masked_3++ if @{$seq_ref} >= 500;
                                                 }
                                         }
                                         print MFILE_DISM "N";
@@ -498,6 +485,9 @@ sub print_seq {
 }
 
 
+###############################################
+# Extend stretches of N bu a few bases
+# Merge stretches of Ns in close vicinity
 sub extend_combine_low_quality_regions {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -519,7 +509,6 @@ sub extend_combine_low_quality_regions {
 					if ($j > 0) {
 						if (${$qual_ref}[$j] >= 0) {
 							${$qual_ref}[$j] = -3;
-							#$n_masked_ext++; # stat
 						}
 					}
 				}
@@ -527,7 +516,6 @@ sub extend_combine_low_quality_regions {
 					if ($j < @{$seq_ref}) {
 						if (${$qual_ref}[$j] >= 0) {
 							${$qual_ref}[$j] = -3;
-							#$n_masked_ext++; # stat
 						}
 					}
 				}
@@ -545,7 +533,6 @@ sub extend_combine_low_quality_regions {
 				for (my $j = $last_n+1; $j < $i; $j++) {
 					if (${$qual_ref}[$j] >= 0) {
 						${$qual_ref}[$j] = -3;
-						#$n_masked_closure++; # stat
 					}
 				}
 			}
@@ -580,9 +567,8 @@ sub mask_by_quality_region {
 }
 
 
-# Search for contigs in scaffolds that should be taken out. The scaffolding
-# should be broken(?)
-# This sets the regions that shall be broken to -1 in the quality string
+# Search for contigs in scaffolds that should be taken out.
+# This sets the regions to be masked to -1 in the quality string
 sub mask_by_quality_contig {
 	my ($seq_ref, $qual_ref) = @_;
 
@@ -594,6 +580,7 @@ sub mask_by_quality_contig {
 		if (${$seq_ref}[$i] eq "N") {
 			if ($start != -1) {
 				if ($count_quality_bases < 20 or $count_quality_bases/$count_bases <= 0.2) {
+
 					# last region had to little high quality values => mask it (= set quality to -1)
 					for (my $j = $start; $j <= $i-1; $j++) {
 						if (${$qual_ref}[$j] > 0) {
@@ -611,8 +598,9 @@ sub mask_by_quality_contig {
 			if ($start == -1) {
 				$start = $i;
 			}
+
 			# Is it a good or a bad base?
-			if (${$qual_ref}[$i] >= 25) {
+			if (${$qual_ref}[$i] >= 20) {
 				$count_quality_bases++;
 			}
 			$count_bases++;
@@ -621,6 +609,7 @@ sub mask_by_quality_contig {
 }
 
 
+# Calculate the quality of a position in a scaffold
 sub set_quality {
 	my ($srt_id, $seq_ref, $qual_ref) = @_;
 
@@ -660,4 +649,3 @@ sub max {
 	return $a if $a >= $b;
 	return $b;
 }
-

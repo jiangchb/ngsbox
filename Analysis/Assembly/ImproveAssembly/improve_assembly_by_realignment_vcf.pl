@@ -19,7 +19,7 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Analysis::Assembly::ImproveAssembly::improve_assembly_by_realignment.pl
+#  Module: Analysis::Assembly::ImproveAssembly::improve_assembly_by_realignment_vcf.pl
 #  Purpose:
 #  In:
 #  Out:
@@ -28,7 +28,7 @@ use warnings;
 
 
 ### User params
-my $usage = "\n$0 trim_len min_length min_read_per_ctg min_bp_per_mm max_obs_exp_cov contig_file config_file unseq_file snp_file deletion_file insertion_file\n\n";
+my $usage = "\n$0 trim_len min_length min_read_per_ctg min_bp_per_mm max_obs_exp_cov contig_file config_file unseq_file snp_file indel_file\n\n";
 
 my $trim_len         = shift or die $usage;	# Number of bases that are trimmed from the 5' and 3' end of a contig by default
 my $min_length       = shift or die $usage;	# Filter threashold: Minimum length of a contig
@@ -65,6 +65,7 @@ while(<CONTIG>) {
 
 	if (substr($_, 0, 1) eq ">") {
 		$id = substr($_, 1);
+		$id =~ s/scaffold_//g;
 	}
 	else {
 		$ctg_seq{$id} .= $_;
@@ -99,6 +100,7 @@ while(<CONFIG>) {
 		# get contig id
 		my ($id, $value) = split(": ", $_);
 		$id =~ s/DEPTH CHR-//g;
+		$id--;
 		
 		# split values
 		my($unique_bases_sequenced, $unique_positions, $unique_depth) = split(/ .{1} /, $value);
@@ -110,14 +112,15 @@ while(<CONFIG>) {
 		# get contig id
 		my ($id, $readcount) = split(": ", $_);
 		$id =~ s/UNIQUE READS CHR-//g;
+		$id--;
 		$ctg_unique_readcount{$id} = $readcount;
 	}
 
 	elsif(substr($_, 0, 15) eq "TOTAL READS CHR") {
 		my ($id, $readcount) = split(": ", $_);
 		$id =~ s/TOTAL READS CHR-//g;
+		$id--;
 		$ctg_readcount{$id} = $readcount;
-		print "TR: $id, " . $ctg_readcount{$id} . "\n";
 	}
 }
 
@@ -125,7 +128,6 @@ while(<CONFIG>) {
 ### Set avg depth (including rep reads
 my $total_yield  = 0;
 foreach $id (keys %ctg_seq) {
-
 	$ctg_depth{$id} = $ctg_readcount{$id} * 100 / $ctg_len{$id};
 	$total_yield += $ctg_readcount{$id} * 100;
 }
@@ -166,23 +168,52 @@ while( <SNP> ) {
 
 	if( substr($_,0,1) ne "#") {
 
+		chomp;
+
 		my @a = split("\t", $_);
+		my @b = split(";", $a[7]);      # Annotations
+		my @c = split(":", $a[8]);      # Genotypes order
+		my @d = split(":", $a[9]);      # Genotypes values
+
+		### Set scaffold id
 		my $id = $a[0];
 		$id =~ s/scaffold_//g;
 
+		### Get annotation
+		my %anno = ();
+		foreach my $anno_string (@b) {
+			my($type, $value) = split("=", $anno_string);
+			$anno{$type} = $value;
+		}
+
+		### Get genotype
+		my %geno = ();
+		for(my $i = 0; $i < $#c; $i++) {
+			$geno{$c[$i]} = $d[$i];
+		}
+		
+		my ($ref_support, $snp_support) = split(",", $geno{AD});
+		my $allele_freq = 1;
+		if( $ref_support > 0) {
+			$allele_freq = $snp_support / $ref_support;
+		}
+
+
+		### add new scaffold snp array if needed
 		if(! exists $snp{$id} ) {
 			my %tmp = ();
 			$snp{$id} = \%tmp;
 		}
 
+
 		# Do not count in trimming range
 		if( ($a[1] > $trim_len) && ($a[1] < ($ctg_len{$id} - $trim_len)) ) {
 
 			# check IUPAC code of contig
-			if( ($a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T") && ($a[4] ne "-") ) {
+			if( $a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T" ) {
 			
 				# Select high quality SNPs
-				if($a[5] >= 30 && $a[7] >= 0.4) {
+				if($a[6] eq "PASS" && $a[5] >= 30 && $snp_support >= 3 && $allele_freq >= 0.7) {
 					$snp{$id}{$a[1]} = 1;
 				}
 			}
@@ -197,27 +228,58 @@ while( <INDEL> ) {
 
 	if( substr($_,0,1) ne "#") {
 
+		chomp;
+
 	        my @a = split("\t", $_);
+		my @b = split(";", $a[7]);      # Annotations
+		my @c = split(":", $a[8]);      # Genotypes order
+		my @d = split(":", $a[9]);      # Genotypes values
+
+		### Set scaffold id
 		my $id = $a[0];
 		$id =~ s/scaffold_//g;
 
+		### Get annotation
+		my %anno = ();
+		foreach my $anno_string (@b) {
+			my($type, $value) = split("=", $anno_string);
+			$anno{$type} = $value;
+		}
+
+		### Get genotype
+		my %geno = ();
+		for(my $i = 0; $i < $#c; $i++) {
+			$geno{$c[$i]} = $d[$i];
+		}
+
+		my ($ref_support, $snp_support) = split(",", $geno{AD});
+		my $allele_freq = 1;
+		if( $ref_support > 0) {
+			$allele_freq = $snp_support / $ref_support;
+		}
+
+		### add new scaffold indel array if needed
 		if(! exists $splitter{$id} ) {
 			my @tmp = ();
 			$splitter{$id} = \@tmp;
 		}
 
+		# Do not count in trimming range
 		if( ($a[1] > $trim_len) && ($a[1] < ($ctg_len{$id} - $trim_len)) ) {
 		
 			# calculate start and end position
-			my $beg = $a[3];
-			my $end = $a[3] + 1;
+			my $beg = $a[1];
+			my $end = $a[1] + 1;
 
 			if( length($a[3]) > length($a[4]) ) {	# deletion
-				$end = $beg + length($a[4]);
+				$end = $beg + length($a[3]);
 				$beg++;
 			}
 
-			push( @{$splitter{$id}}, "$beg-$end");
+			# Select high quality indels
+			if($a[6] eq "PASS" && $a[5] >= 3 && $allele_freq >= 0.5) { 
+				push( @{$splitter{$id}}, "$beg-$end");
+			}
 		}
 	}
 }
@@ -242,6 +304,7 @@ foreach $id ( keys %splitter ) {
 
 ### Validate
 foreach $id (sort {$a<=>$b} keys %ctg_seq) {
+
 	my $remapping_mm =  scalar( keys %{$snp{$id}} );
 
 	# Remove low read count contigs
@@ -251,8 +314,12 @@ foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 	}
 
 	# Remove bad coverage contigs
-	elsif(	(($ctg_depth{$id} / $genome_depth) >= $max_obs_exp_cov) ||
-		(($genome_depth / $ctg_depth{$id}) >= $max_obs_exp_cov)
+	elsif(	($ctg_unique_depth{$id} > 0) &&
+		(
+		  (($ctg_unique_depth{$id} / $genome_unique_depth) >= $max_obs_exp_cov) ||
+		  #(($genome_unique_depth / $ctg_unique_depth{$id}) >= $max_obs_exp_cov)
+		  ($ctg_unique_depth{$id} < 5)
+		)
 	){
 		delete $ctg_seq{$id};
 		print STDERR "BAD COVERAGE: $id\t" . $ctg_len{$id} . "\t" . $ctg_depth{$id} . "\n";
