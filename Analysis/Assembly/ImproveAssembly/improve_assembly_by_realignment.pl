@@ -182,7 +182,7 @@ while( <SNP> ) {
 		if( ($a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T") && ($a[4] ne "-") ) {
 		
 			# Select high quality SNPs 
-			if($a[5] >= 30 && $a[7] >= 0.7) {
+			if($a[5] >= 25 && $a[7] >= 0.5) {
 				$snp{$id}{$a[2]} = 1;
 			}
 		}

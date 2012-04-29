@@ -50,6 +50,7 @@ my %ctg_readcount        = ();
 my %ctg_unique_readcount = ();
 my %ctg_depth            = ();
 my %ctg_unique_depth     = ();
+my %ctg_unique_pos       = ();
 
 my %splitter = ();
 my %unseq_N  = ();
@@ -105,6 +106,7 @@ while(<CONFIG>) {
 		# split values
 		my($unique_bases_sequenced, $unique_positions, $unique_depth) = split(/ .{1} /, $value);
 		$ctg_unique_depth{$id} = $unique_depth;
+		$ctg_unique_pos{$id} = $unique_positions;
 	}
 
 	elsif(substr($_, 0, 16) eq "UNIQUE READS CHR") {
@@ -141,6 +143,7 @@ while( <UNSEQ> ) {
 	my @a = split("\t", $_);
 	my $id = $a[0];
 	$id =~ s/scaffold_//g;
+	$id--;
 
 	if(! exists $unseq_N{$id} ) {
 		my @tmp1 = ();
@@ -156,6 +159,7 @@ while( <UNSEQ> ) {
 			push( @{$unseq_N{$id}}, "$a[1]-$a[2]" );
 		}
 		else {
+			print STDERR "NO COVERAGE: $id:$a[1]..$a[2]\t$unseq_seq\n";
 			push( @{$splitter{$id}}, "$a[1]-$a[2]" );
 		}
 	}
@@ -213,7 +217,7 @@ while( <SNP> ) {
 			if( $a[3] eq "A" || $a[3] eq "C" || $a[3] eq "G" || $a[3] eq "T" ) {
 			
 				# Select high quality SNPs
-				if($a[6] eq "PASS" && $a[5] >= 30 && $snp_support >= 3 && $allele_freq >= 0.7) {
+				if($a[6] eq "PASS" && $a[5] >= 25 && $snp_support >= 3 && $allele_freq >= 0.5) {
 					$snp{$id}{$a[1]} = 1;
 				}
 			}
@@ -277,8 +281,18 @@ while( <INDEL> ) {
 			}
 
 			# Select high quality indels
-			if($a[6] eq "PASS" && $a[5] >= 3 && $allele_freq >= 0.5) { 
-				push( @{$splitter{$id}}, "$beg-$end");
+			if($a[6] eq "PASS" && $a[5] >= 3 && $allele_freq >= 0.5) {
+
+				### add new scaffold array if needed
+				if(! exists $snp{$id} ) {
+					my %tmp = ();
+					$snp{$id} = \%tmp;
+				}
+
+				#push( @{$splitter{$id}}, "$beg-$end");
+				for(my $i = $beg; $i <= $end; $i++) {
+					$snp{$id}{$i} = 1;
+				}
 			}
 		}
 	}
@@ -286,31 +300,42 @@ while( <INDEL> ) {
 
 
 # Mask sequence around gaps
-foreach $id ( keys %splitter ) {
-	my %split_locus = ();
-
-	foreach my $locus ( @{$splitter{$id}} ) {
-		my ($beg, $end) = split("-", $locus);
-		$beg -= 20; $end += 20;
-
-		for(my $i = $beg; $i <= $end; $i++) {
-			substr($ctg_seq{$id}, $i-1, 1, "N");
-			push( @{$unseq_N{$id}}, "$beg-$end" );
-			delete $snp{$id}{$i};
-		}
-	}
-}
+# foreach $id ( sort {$a<=>$b} keys %splitter ) {
+#	my %split_locus = ();
+#
+#	foreach my $locus ( @{$splitter{$id}} ) {
+#		my ($beg, $end) = split("-", $locus);
+#		$beg -= 20; $end += 20;
+#
+#		for(my $i = $beg; $i <= $end; $i++) {
+#			#substr($ctg_seq{$id}, $i-1, 1, "N");
+#			#push( @{$unseq_N{$id}}, "$beg-$end" );
+#			#delete $snp{$id}{$i};
+#		}
+#	}
+#}
 
 
 ### Validate
+print STDERR "\n\nERROR\tID\tctg_length\tctg_readcount\tctg_depth\tctg_unique_pos\tctg_unique_readcount\tctg_unique_depth\tlen_per_error\n";
+
 foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 
 	my $remapping_mm =  scalar( keys %{$snp{$id}} );
 
+	my $len_per_error = -1;
+	if($remapping_mm > 0) {
+		$len_per_error = $ctg_len{$id} / $remapping_mm;
+	}
+
+
 	# Remove low read count contigs
 	if( $ctg_readcount{$id} < $min_read_per_ctg) {
 		delete $ctg_seq{$id};
-		print STDERR "BAD COUNT: $id\t" . $ctg_len{$id} . "\t" . $ctg_readcount{$id} . "\n";
+		print STDERR "BAD COUNT\t$id\t" . 
+			$ctg_len{$id} ."\t". $ctg_readcount{$id} ."\t". $ctg_depth{$id} ."\t".
+			$ctg_unique_pos{$id} ."\t". $ctg_unique_readcount{$id} ."\t". $ctg_unique_depth{$id} ."\t".
+			$len_per_error . "\n";
 	}
 
 	# Remove bad coverage contigs
@@ -322,19 +347,28 @@ foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 		)
 	){
 		delete $ctg_seq{$id};
-		print STDERR "BAD COVERAGE: $id\t" . $ctg_len{$id} . "\t" . $ctg_depth{$id} . "\n";
+		print STDERR "BAD COVERAGE\t$id\t" .
+			$ctg_len{$id} ."\t". $ctg_readcount{$id} ."\t". $ctg_depth{$id} ."\t".
+			$ctg_unique_pos{$id} ."\t". $ctg_unique_readcount{$id} ."\t". $ctg_unique_depth{$id} ."\t".
+			$len_per_error . "\n";
 	}
 
 	# Remove erroneous contigs
-	elsif( ($remapping_mm != 0) && (($ctg_len{$id} / $remapping_mm) < $min_bp_per_mm) ) {
+	elsif( ($remapping_mm != 0) && ($len_per_error < $min_bp_per_mm) ) {
 		delete $ctg_seq{$id};
-		print STDERR "MISMATCHES: $id\t" . $ctg_len{$id} . "\t" . $ctg_len{$id} / $remapping_mm . "\n";
+		print STDERR "MISMATCHES\t$id\t" .
+			$ctg_len{$id} ."\t". $ctg_readcount{$id} ."\t". $ctg_depth{$id} ."\t".
+			$ctg_unique_pos{$id} ."\t". $ctg_unique_readcount{$id} ."\t". $ctg_unique_depth{$id} ."\t".
+			$len_per_error . "\n";
 	}
 
 	# Remove short contigs
 	elsif($ctg_len{$id} < $min_length) {
 		delete $ctg_seq{$id};
-		print STDERR "BAD LENGTH: $id\t" . $ctg_len{$id} . "\n";
+		print STDERR "BAD LENGTH\t$id\t" .
+			$ctg_len{$id} ."\t". $ctg_readcount{$id} ."\t". $ctg_depth{$id} ."\t".
+			$ctg_unique_pos{$id} ."\t". $ctg_unique_readcount{$id} ."\t". $ctg_unique_depth{$id} ."\t".
+			$len_per_error . "\n";
 	}
 }
 
@@ -347,9 +381,11 @@ foreach $id (sort {$a<=>$b} keys %ctg_seq) {
 	$total_genome_coverage += $ctg_len{$id};
 	my $trimmed_contig = substr($ctg_seq{$id}, $trim_len, $ctg_len{$id});
 
-	print ">$id | " . $ctg_len{$id} . "\n" . $trimmed_contig . "\n";
+	# Activate to print high quality scaffolds
+	#print ">$id | " . $ctg_len{$id} . "\n" . $trimmed_contig . "\n";
 }
 
+print STDERR "Average unique contig coverage: $genome_unique_depth\n";
 print STDERR "Average contig coverage: $genome_depth\n";
 print STDERR "Total genome covered: $total_genome_coverage\n";
 
