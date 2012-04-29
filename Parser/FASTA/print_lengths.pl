@@ -26,7 +26,9 @@ use warnings;
 #
 
 my $usage="$0 fasta\n";
-open FILE, shift or die $usage;
+my $file = shift or die $usage;
+
+open FILE, $file or die "Cannot open input file\n";
 
 my $seq = "";
 
