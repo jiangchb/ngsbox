@@ -30,7 +30,7 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--outfolder \t folder to write the analysis to \n",
 	   "--qsubname \t name of the script you want to start lateron \n",
 	   "--max_coverage \t used in SNP filtering with samtools (400 works well) \n",
-	   "--namestart \t  start of a substring in the read file name (first letter is numbered 0) \n",
+	   "--namestart \t  start of a substring in the read file name (first letter is numbered 1) \n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--readextension \t describes the name of the read files (e.g. fastq.gz)\n",
 	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
@@ -42,7 +42,7 @@ my $infolder;
 my $outfolder;
 my $qsub_name;
 my $max_cov; 
-my $nameStart;
+my $nameStart = 'NA';
 my $nameLength;
 my $readextension;
 my $cpu = 8;
@@ -50,7 +50,7 @@ my $help = 0;
 
 GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "cpu=i" => \$cpu, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $readextension && $help == 0) {
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $readextension && $help == 0) {
 	usage;
 	exit;
 }

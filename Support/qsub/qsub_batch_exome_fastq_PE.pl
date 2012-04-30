@@ -31,7 +31,7 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--outfolder \t folder to write the analysis to \n",
 	   "--qsubname \t name of the script you want to start lateron \n",
 	   "--max_coverage \t used in SNP filtering with samtools (400 works well) \n",
-	   "--namestart \t  start of a substring in the read file name (first letter is numbered 0) \n",
+	   "--namestart \t  start of a substring in the read file name (first letter is numbered 1) \n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--firstreadextension \t describes the name of the first read file (e.g. 1.fastq.gz or 1_sequence.txt.gz)\n",
 	   "--secondreadextension \t describes the name of the first read file (e.g. 2.fastq.gz or 2_sequence.txt.gz)\n",
@@ -44,7 +44,7 @@ my $infolder;
 my $outfolder;
 my $qsub_name;
 my $max_cov; 
-my $nameStart;
+my $nameStart = 'NA';
 my $nameLength;
 my $firstreadextension;
 my $secondreadextension;
@@ -53,7 +53,7 @@ my $help = 0;
 
 GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $firstreadextension && $secondreadextension && $help == 0) {
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $firstreadextension && $secondreadextension && $help == 0) {
 	usage;
 	exit;
 }
@@ -71,7 +71,7 @@ foreach my $read1 (@files) {
 	my $fileleaf = $filepath[$#filepath];
 
 
-	my $name = substr($fileleaf, $nameStart, $nameLength);
+	my $name = substr($fileleaf, $nameStart - 1 , $nameLength);
 
 	unless (-e "$outfolder") {
 		mkdir "$outfolder"  or die "Cannot create output directory $outfolder";
