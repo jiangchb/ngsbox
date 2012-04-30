@@ -33,13 +33,9 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--max_coverage \t used in SNP filtering with samtools (400 works well) \n",
 	   "--namestart \t starting with first letter numbered 0 \n",
 	   "--namelength \t the part of the filenames which should be taken as sample (and folder) name \n",
+           "--bamextension \t describes the name of the BAM file (e.g. .bam)\n",
 	   "--help \t\t show help \n";
-	   
-	   }
-# my $infolder  = shift or die $usage;
-# my $outfolder = shift or die $usage;
-# my $qsub_name = shift or die $usage;
-# my $max_cov   = shift or die $usage;
+}
 
 my $infolder;
 my $outfolder;
@@ -47,16 +43,17 @@ my $qsub_name;
 my $max_cov; 
 my $nameStart;
 my $nameLength;
+my $bamextension;
 my $help = 0;
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "help=s" => \$help);
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "bamextension=s" => \$bamextension, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $help == 0) {
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart && $nameLength && $bamextension && $help == 0) {
 	usage;
 	exit;
 }
 
-my @files = glob($infolder . "/*");
+my @files = glob($infolder . "/*$bamextension");
 
 
 foreach my $file (@files) {
@@ -64,34 +61,32 @@ foreach my $file (@files) {
 	my @filepath = split("/", $file);
 	my $fileleaf = $filepath[$#filepath];
 
-	if($fileleaf !~ ".bai") {
 		
-		my $name = substr($fileleaf, $nameStart, $nameLength);
+	my $name = substr($fileleaf, $nameStart, $nameLength);
 	
-		unless (-e "$outfolder") {
-			mkdir "$outfolder"  or die "Cannot create output directory $outfolder";
-		}
+	unless (-e "$outfolder") {
+		mkdir "$outfolder"  or die "Cannot create output directory $outfolder";
+	}
 		
-		if(! -e "$outfolder/$name") {
-			mkdir "$outfolder/$name" or die "Cannot create output directory $outfolder/$name";
-		}
-		else {
-			print STDERR "Runfolder $outfolder/$name already exists. Will only update qsub file\n"
-		}
+	if(! -e "$outfolder/$name") {
+		mkdir "$outfolder/$name" or die "Cannot create output directory $outfolder/$name";
+	}
+	else {
+		print STDERR "Runfolder $outfolder/$name already exists. Will only update qsub file\n"
+	}
 	
-		open OUT, ">$outfolder/$name/$qsub_name" or die "Cannot create qsub file $outfolder/$name/$qsub_name";
+	open OUT, ">$outfolder/$name/$qsub_name" or die "Cannot create qsub file $outfolder/$name/$qsub_name";
 
 
+	my $qsubNname; 
+	if ($name =~ /^\d/) {
+		$qsubNname = 's'.$name;
+	}
+	else {
+		$qsubNname = $name;
+	}# qsub doesn't like jobs starting with a digit
 
-my $qsubNname; 
-if ($name =~ /^\d/) {
-	$qsubNname = 's'.$name;
-}
-else {
-	$qsubNname = $name;
-}# qsub doesn't like jobs starting with a digit
-
-my @qsub = ("#!/bin/bash
+	my @qsub = ("#!/bin/bash
 
 #\$ -N $qsubNname
 #\$ -e $outfolder/$name/
@@ -101,7 +96,6 @@ my @qsub = ("#!/bin/bash
 source /users/so/sossowski/.bashrc
 export TMPDIR=/users/GD/projects/HumanDisease/tmp
 export _JAVA_OPTIONS=-Djava.io.tmpdir=/users/GD/projects/HumanDisease/tmp
-# export PATH=/users/GD/tools/annovar/annovar_2011May06/:\$PATH
 export PATH=/users/GD/tools/annovar/annovar_2011Nov20/:\$PATH
 
 
@@ -112,17 +106,13 @@ REF=/users/GD/projects/genome_indices/human/hg19/bwa/hg19.fasta
 # EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_standard/shore_format
 # EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_extended/shore_format
 EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/shore_format
-# BWA=/users/GD/tools/bwa/bwa-0.5.9/bwa
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
-# BWA=/users/GD/tools/bwa/bwa-0.6.1/bwa
-# GATK=/users/GD/tools/GATK_src/dist/GenomeAnalysisTK.jar
 GATK=/users/GD/tools/GATK/GATK_src_1.4-15-gcd43f01/dist/GenomeAnalysisTK.jar
 SAMTOOLS=/soft/bin
-# ANNOVAR=/users/GD/tools/annovar/annovar_2011May06
 ANNOVAR=/users/GD/tools/annovar/annovar_2011Nov20
 SHORE=/users/GD/tools/shore/shore
 NGSBOX=/users/GD/tools/ngsbox
-
+RSCRIPT=/soft/bin/Rscript
 
 ### Add read group
 java -Xmx4g -jar /users/GD/tools/Converters/picard/trunk/dist/AddOrReplaceReadGroups.jar I=\$BAM O=\$OUTF/\$NAME.bam SORT_ORDER=coordinate RGID=\$NAME RGLB=\$NAME RGPL=illumina RGSM=\$NAME RGPU=lane CREATE_INDEX=True VALIDATION_STRINGENCY=LENIENT
@@ -139,6 +129,8 @@ else
    echo \$NAME.sort.bam.bai not found
    exit
 fi
+
+
 
 ### Duplicate marking
 if [ -s \$OUTF/\$NAME.realigned.bam ];
@@ -166,7 +158,6 @@ fi
 
 
 
-
 ### Cleanup
 rm \$OUTF/\$NAME.sam
 rm \$OUTF/\$NAME.bam
@@ -175,6 +166,7 @@ rm \$OUTF/\$NAME.realigned.bai
 rm \$OUTF/\$NAME.realigned.dm.bam
 rm \$OUTF/\$NAME.realigned.dm.bai
 rm \$OUTF/\$NAME.realigned.dm.bam.bai
+
 
 
 ### GATK: Call SNPs and Indels with the GATK Unified Genotyper
@@ -195,6 +187,7 @@ then
 fi
 
 
+
 ### MPILEUP: Call SNPs and Indels
  \$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.realigned.dm.recalibrated.bam | \$SAMTOOLS/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
  \$SAMTOOLS/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/vcfutils.pl varFilter -d5 -D$max_cov -W 20 > \$OUTF/MPILEUP.variant.raw.vcf
@@ -208,6 +201,7 @@ then
 fi
 
 
+
 ### SHORE: Prepare format map.list
 mkdir \$OUTF/shore
  \$SHORE convert --sort -r \$REF -n 6 -g 1 -e 20 -s Alignment2Maplist \$OUTF/\$NAME.realigned.dm.recalibrated.bam \$OUTF/shore/map.list.gz
@@ -217,6 +211,8 @@ then
    echo shore/map.list.gz not found
    exit
 fi
+
+
 
 ### SHORE: compute coverage plot in GFF format for browsers
  \$SHORE coverage -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/CoverageAnalysis
@@ -237,6 +233,7 @@ grep enriched \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OU
 grep depleted \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_depleted.txt
 grep enriched \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_enriched.txt
 grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_depleted.txt
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus150/
 
 
 
@@ -250,9 +247,11 @@ then
 fi
 
 
+
 ### Clean up
 rm -r \$OUTF/shore/Variants/ConsensusAnalysis/supplementary_data
 gzip -9 \$OUTF/shore/Variants/ConsensusAnalysis/reference.shore
+
 
 
 
@@ -301,7 +300,6 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp /users/GD/projects/genom
 
 
 
-
 ### Filter and compare indel calls from 3 different pipelines
 # Filtering
 mkdir \$OUTF/Indel_Intersection
@@ -345,36 +343,41 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp /users/GD/projects/genom
 
 
 
-
 ### Annotate SNPs with ANNOVAR: Intersection, all three tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarIntersection
 egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
 \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
-# \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann \$ANNOVAR/hg19/
 \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
 \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
-# \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann \$ANNOVAR/hg19/
 \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
 
 
 ### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarUnion
 \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
-# \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann \$ANNOVAR/hg19/
 \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
+
 ### Annotate Indels with ANNOVAR
-mkdir \$OUTF/Indel_Intersection/AnnovarUnion
+mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
-# \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann \$ANNOVAR/hg19/
-\$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
+\$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
+
+
+### Annotate Indels with ANNOVAR: Union, indels predicted by any tool
+mkdir \$OUTF/Indel_Intersection/AnnovarUnion
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 

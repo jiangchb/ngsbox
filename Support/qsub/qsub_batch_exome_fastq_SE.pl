@@ -116,6 +116,7 @@ NGSBOX=/users/GD/tools/ngsbox
  \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
 
 
+
 ### Correct paired end files
 if [ -s \$OUTF/\$NAME.sai ];
 then
@@ -125,6 +126,8 @@ else
    echo \$NAME.sai
    exit
 fi
+
+
 
 ### Convert SAM to BAM
 if [ -s \$OUTF/\$NAME.sam ];
@@ -136,6 +139,8 @@ else
    exit
 fi
 
+
+
 ### Sort BAM file
 if [ -s \$OUTF/\$NAME.bam ];
 then
@@ -146,6 +151,8 @@ else
    exit
 fi
 
+
+
 ### Index sorted BAM file
 if [ -s \$OUTF/\$NAME.sort.bam ];
 then
@@ -155,6 +162,8 @@ else
    echo \$NAME.sort.bam not found
    exit
 fi
+
+
 
 ### Local Re-alignment
 if [ -s \$OUTF/\$NAME.sort.bam.bai ];
@@ -168,6 +177,7 @@ else
 fi
 
 
+
 ### Base quality recalibration
 if [ -s \$OUTF/\$NAME.realigned.dm.bam ];
 then
@@ -178,6 +188,7 @@ else
    echo \$NAME.realigned.dm.bam not found
    exit
 fi
+
 
 
 ### Cleanup
@@ -285,9 +296,11 @@ then
    exit
 fi
 
+
 ### Clean up
 rm -r \$OUTF/shore/Variants/ConsensusAnalysis/supplementary_data
 gzip -9 \$OUTF/shore/Variants/ConsensusAnalysis/reference.shore
+
 
 
 
@@ -336,7 +349,6 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/
 
 
 
-
 ### Filter and compare indel calls from 3 different pipelines
 # Filtering
 mkdir \$OUTF/Indel_Intersection
@@ -380,12 +392,12 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/
 
 
 
-
 ### Annotate SNPs with ANNOVAR: Intersection, all three tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarIntersection
 egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
 \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
 \$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann \$ANNOVAR/hg19/
+
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
@@ -395,11 +407,31 @@ egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Inters
 \$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann \$ANNOVAR/hg19/
 
 
+
+### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
+mkdir \$OUTF/SNP_Intersection/AnnovarUnion
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
+
+
 ### Annotate Indels with ANNOVAR
-mkdir \$OUTF/Indel_Intersection/AnnovarUnion
+mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
-\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann \$ANNOVAR/hg19/
+\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
+\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann \$ANNOVAR/hg19/
+
+
+
+### Annotate Indels with ANNOVAR: Union, indels predicted by any tool
+mkdir \$OUTF/Indel_Intersection/AnnovarUnion
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
+
+
+### Clean up
+rm \$OUTF/MPILEUP.variant.raw.bcf
 
 \n");
 
