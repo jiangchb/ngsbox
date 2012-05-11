@@ -92,7 +92,6 @@ my @qsub = ("#!/bin/bash
 source /users/so/sossowski/.bashrc
 export TMPDIR=/users/GD/projects/HumanDisease/tmp
 export _JAVA_OPTIONS=-Djava.io.tmpdir=/users/GD/projects/HumanDisease/tmp
-# export PATH=/users/GD/tools/annovar/annovar_2011May06/:\$PATH
 export PATH=/users/GD/tools/annovar/annovar_2011Nov20/:\$PATH
 
 
@@ -106,7 +105,6 @@ EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/sho
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
 GATK=/users/GD/tools/GATK/GATK_src_1.4-15-gcd43f01/dist/GenomeAnalysisTK.jar
 SAMTOOLS=/soft/bin
-# ANNOVAR=/users/GD/tools/annovar/annovar_2011May06
 ANNOVAR=/users/GD/tools/annovar/annovar_2011Nov20
 SHORE=/users/GD/tools/shore/shore
 NGSBOX=/users/GD/tools/ngsbox
@@ -288,7 +286,7 @@ grep depleted \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$
 
 
 ### SHORE: Call SNPs and Indels
- \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E  \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 3 -y -v
+ \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E  \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 3 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then

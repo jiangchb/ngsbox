@@ -164,7 +164,6 @@ rm \$OUTF/\$NAME.bam
 rm \$OUTF/\$NAME.realigned.bam
 rm \$OUTF/\$NAME.realigned.bai
 rm \$OUTF/\$NAME.realigned.dm.bam
-rm \$OUTF/\$NAME.realigned.dm.bai
 rm \$OUTF/\$NAME.realigned.dm.bam.bai
 
 
@@ -238,7 +237,7 @@ grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$
 
 
 ### SHORE: Call SNPs and Indels
- \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
+ \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then

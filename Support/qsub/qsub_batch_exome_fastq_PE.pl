@@ -223,7 +223,6 @@ rm \$OUTF/\$NAME.bam
 rm \$OUTF/\$NAME.realigned.bam
 rm \$OUTF/\$NAME.realigned.bai
 rm \$OUTF/\$NAME.realigned.dm.bam
-rm \$OUTF/\$NAME.realigned.dm.bai
 rm \$OUTF/\$NAME.realigned.dm.bam.bai
 
 
@@ -319,7 +318,7 @@ grep depleted \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$
 
 
 ### SHORE: Call SNPs and Indels
- \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/Analysis/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
+ \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then
@@ -431,13 +430,11 @@ egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Int
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
-
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
-
 
 
 ### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
@@ -447,12 +444,19 @@ mkdir \$OUTF/SNP_Intersection/AnnovarUnion
 
 
 
-### Annotate Indels with ANNOVAR: Partial union, must include SHORE call
+### Annotate Indels with ANNOVAR: Intersection
+mkdir \$OUTF/Indel_Intersection/AnnovarIntersection
+egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarIntersection/sum \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
+
+
+### Annotate Indels with ANNOVAR: Partial Union, must include SHORE or at least two tools
 mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
-egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
-
 
 
 ### Annotate Indels with ANNOVAR: Union, indels predicted by any tool
