@@ -44,12 +44,15 @@ while (my $line = <FILE>) {
 close FILE;
 
 open FILE, $file or die $usage;
+my $count = 0;
 while (my $line = <FILE>) {
         my @a = split " ", $line;
 	#if (substr($a[0], 0, 3) eq "Chr") {
 	#	$a[0] = substr($a[0], 3);
 	#}
 	my $id = $a[0]."#".$a[1];
+	print STDERR $id, "<-------\n" if $count%100000==0;
+	$count++;
 	if (defined($POS{$id})) {
 		print $line;
 	}

@@ -33,7 +33,7 @@ my $bg = shift or die $usage;
 my $var = shift or die $usage;
 
 my %BG = ();
-my %VAR = ();
+my @VAR = ();
 
 my @files = split ",", $bg;
 
@@ -55,14 +55,14 @@ open FILE, $var or die $usage;
 while (my $line = <FILE>) {
 	my @a = split " ", $line;
 	if (not defined($BG{$a[1]."#".$a[2]})) {
-		my $id = ($a[1] * 100000000) + $a[2];
-		$VAR{$id} = $line;
+	#	my $id = ($a[1] * 100000000) + $a[2];
+		push @VAR, $line;
 	}
 
 }
 
-foreach my $key (sort {$a <=> $b} keys %VAR) {
-	print $VAR{$key};
+foreach my $key (@VAR) {
+	print $key;
 }
 
 

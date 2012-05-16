@@ -34,7 +34,7 @@ my $count = 0;
 my $file_count = 1;
 
 open IN, $file or die "Cannot open input file\n";
-open OUT, ">$file_count.txt" or die "Cannot open output file\n";
+open OUT, ">$file.batch$file_count" or die "Cannot open output file\n";
 
 while( <IN> ) {
 	print OUT "$_";
@@ -44,7 +44,7 @@ while( <IN> ) {
 		$count = 0;
 		$file_count++;
 		close OUT;
-		open OUT, ">$file_count.txt" or die "Cannot open output file\n";
+		open OUT, ">$file.batch$file_count" or die "Cannot open output file\n";
 	}
 }
 close IN; close OUT;

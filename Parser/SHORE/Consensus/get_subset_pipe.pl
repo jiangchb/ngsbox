@@ -19,35 +19,31 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::FASTA::print_lengths.pl
+#  Module: Parser::SHORE::Consensus::get_subset.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
-my $usage="$0 fastq\n";
-open FILE, shift or die $usage;
 
-my $seq = "";
-my $flag = 0;
+my $usage= "\n$0 markerfile < consensus_summary.txt\n\n" ;
+my $subset = shift or die $usage;
 
-while (<FILE>) {
-	if (substr($_, 0, 1) eq "@") {
-		print length($seq), "\n" if ($seq ne "");
-		$seq = "";
-		$flag = 1;
-	}
-	elsif(substr($_, 0, 1) eq "+") {
-		$flag = 0;
-	}
-	else {
-		if ($flag == 1) {
-			chomp();
-			$seq.=$_;
-		}
+my %POS = ();
+
+open FILE, $subset or die $usage;
+while (my $line = <FILE>) {
+        my @a = split " ", $line;
+	my $id = $a[1]."#".$a[2];
+	$POS{$id} = 1;
+}
+close FILE;
+
+while (my $line = <STDIN>) {
+        my @a = split " ", $line;
+	my $id = $a[0]."#".$a[1];
+	if (defined($POS{$id})) {
+		print $line;
 	}
 }
-print length($seq), "\n" if ($seq ne "");
-
-
 

@@ -5,8 +5,6 @@ use warnings;
 ###### 
 # NGSbox - bioinformatics analysis tools for next generation sequencing data
 #
-# Copyright 2007-2011 Stephan Ossowski, Korbinian Schneeberger
-# 
 # NGSbox is free software: you can redistribute it and/or modify it under the 
 # terms of the GNU General Public License as published by the Free Software 
 # Foundation, either version 3 of the License, or any later version.
@@ -33,15 +31,21 @@ my $CVP_EXT = 50;
 
 my $MIN_QUA_VAR = 25;
 my $MIN_CON_VAR = 0.9;
+#my $MIN_CON_VAR = 0.8;
 my $MAX_REP_VAR = 1.1;
+#my $MAX_REP_VAR = 1.9;
 
 my $MIN_QUA_REF = 25;
 my $MIN_CON_REF = 0.9;
+#my $MIN_CON_REF = 0.8;
 my $MAX_REP_REF = 1.1;
+#my $MAX_REP_REF = 1.9;
 
 my $MIN_DISTANCE = 100;
+#my $MIN_DISTANCE = 0;
 
 my $COV_PRC = 0.025;
+#my $COV_PRC = 0;
 
 ## Usage
 
@@ -185,16 +189,16 @@ sub filter_hq_marker {
                 foreach my $pos (sort{$a<=>$b}keys %{${$markerref}{$chr}}) {
                         my $val_str = ${${$markerref}{$chr}}{$pos};
        	                my @val = split "#", $val_str;
-			if ($val[0] <= $lower1 or $val[0] >= $upper1) {
+			if ($val[0] < $lower1 or $val[0] > $upper1) {
 				$c_cov_del1++;
 			}
-			if ($val[2] <= $lower2 or $val[2] >= $upper2) {
+			if ($val[2] < $lower2 or $val[2] > $upper2) {
 				$c_cov_del2++;
 			}
 			if ($last_pos + $MIN_DISTANCE >= $pos) {
 				$c_dist_del++;
 			}
-			if ($last_pos + $MIN_DISTANCE >= $pos or $val[0] <= $lower1 or $val[0] >= $upper1 or $val[2] <= $lower2 or $val[2] >= $upper2) {
+			if ($last_pos + $MIN_DISTANCE >= $pos or $val[0] < $lower1 or $val[0] > $upper1 or $val[2] < $lower2 or $val[2] > $upper2) {
 				delete ${${$markerref}{$chr}}{$pos};
 				$c_del++;
 			}

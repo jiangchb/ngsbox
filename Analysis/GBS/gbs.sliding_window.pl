@@ -15,17 +15,17 @@
 use strict;
 
 my $usage = "$0 consensus filtered_marker chrsizes\n";
-print_log();
 my $f_cons = shift or die $usage;
 my $f_marker = shift or die $usage;
 my $f_chrsizes = shift or die $usage;
+print_log();
 
 my %MARKER_A1 = ();
 my %MARKER_A2 = ();
 my %MARKER_C1 = ();
 my %MARKER_C2 = ();
 my %ALLELE = ("A" => 0, "C" => 1, "G" => 2, "T" => 3);
-my $FILTERED_BASE_CALLS = 1;
+my $REPEAT_FILTERED_BASE_CALLS = 1;
 
 my %SLID_WIN_C1 = ();
 my %SLID_WIN_C2 = ();
@@ -33,12 +33,12 @@ my %SLID_WIN_M = ();
 my %SLID_WIN_CALL = ();
 
 my %CHR_SIZE = ();
-my $SLID_WIN_SIZE = 50000;
+my $SLID_WIN_SIZE = 100000;
 my $SLID_WIN_MIN_MARKER = 10;
-my $SLID_WIN_MIN_READS = 30;
+my $SLID_WIN_MIN_READS = 15;
 
 my $SLID_WIN_HOM_CUTOFF = 0.9;
-my $SLID_WIN_HET_CUTOFF = 0.25;
+my $SLID_WIN_HET_CUTOFF = 0.10;
 
 ### Read in markers and allele counts
 
@@ -68,6 +68,7 @@ foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_C1) {
 		my $c1 = 0;
 		my $c2 = 0;
 		my $call = "N";
+		my $num_marker = (defined($SLID_WIN_M{$chr}{$pos})? $SLID_WIN_M{$chr}{$pos} : 0);
 	
 		if (defined($SLID_WIN_C1{$chr}{$pos})) {
 			$c1 = $SLID_WIN_C1{$chr}{$pos};
@@ -77,7 +78,7 @@ foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_C1) {
 			if ($cs < $SLID_WIN_MIN_READS) {
 				$call = "N";
 			}
-			elsif ($SLID_WIN_M{$chr}{$pos} < $SLID_WIN_MIN_MARKER) {
+			elsif ($num_marker < $SLID_WIN_MIN_MARKER) {
 				$call = "N";
 			}
 			elsif ($c1 >= $SLID_WIN_HOM_CUTOFF*$cs) {
@@ -86,12 +87,12 @@ foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_C1) {
 			elsif ($c2 >= $SLID_WIN_HOM_CUTOFF*$cs) {
 				$call = "2";
 			}
-			elsif ($c1 >= 0.5 - $SLID_WIN_HET_CUTOFF and $c1 <= 0.5 + $SLID_WIN_HET_CUTOFF) {
+			elsif (($c1/$cs) >= 0.5 - $SLID_WIN_HET_CUTOFF and ($c1/$cs) <= 0.5 + $SLID_WIN_HET_CUTOFF) {
 				$call = "3"
 			}
 		}
 
-		print OUT "$chr\t",($pos+1),"\t",$end,"\t$call\t$c1\t$c2\n";
+		print OUT "$chr\t",($pos+1),"\t",$end,"\t$call\t$c1\t$c2\t",($c1+$c2),"\t$num_marker\n";
 		$SLID_WIN_CALL{$chr}{$pos} = $call;
 	}
 }
@@ -105,7 +106,7 @@ open OUT, "> GBS.sliding_window_breakpoints.txt";
 my %count_recomb_break = ();
 
 foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_CALL) {
-	my $start = 1;
+	my $start = 0;
 	my $pos = 0;
 	my $end = 0;
 	my $genotype = 0;
@@ -122,11 +123,12 @@ foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_CALL) {
 			}
 			else {
 				## report last genotype
-				print OUT $chr,"\t",$start,"\t",$end,"\t",$genotype,"\n";
-				if ($end+1 != $pos) {
-					print OUT $chr,"\t",$start,"\t",$end,"\tN\n";
+				print OUT $chr,"\t",($start+1),"\t",$end,"\t",$genotype,"\n";
+				if ($end != $pos) {
+					print OUT $chr,"\t",($end+1),"\t",$pos,"\tN\n";
 				}
 				## set new background
+				$genotype = $call;
 				$start = $pos;
 				$end = $pos + $SLID_WIN_SIZE;
 
@@ -149,19 +151,26 @@ foreach my $chr (sort {$a <=> $b} keys %SLID_WIN_CALL) {
 ### Output breakpoint summary
 open OUT, "> GBS.sliding_window_recomb_num.txt" or die "cannot open log";
 my $f = 0;
-foreach my $chr (sort {$a <=> $b} keys %count_recomb_break) {
-	print OUT "\t" if $f != 0;
-	$f = 1;
-	print OUT $chr;
-}
-print OUT "\tall\n";
+#foreach my $chr (sort {$a <=> $b} keys %count_recomb_break) {
+#	print OUT "\t" if $f != 0;
+#	$f = 1;
+#	print OUT $chr;
+#}
+#print OUT "\tall\n";
+print OUT "1\t2\t3\t4\t5\tall\n";
 $f = 0;
-$sum=0;
-foreach my $chr (sort {$a <=> $b} keys %count_recomb_break) {
+my $sum=0;
+#foreach my $chr (sort {$a <=> $b} keys %count_recomb_break) {
+for (my $chr=1; $chr<=5; $chr++) {
         print OUT "\t" if $f != 0;
         $f = 1;
-        print OUT $count_recomb_break{$chr};
-	$sum+=$count_recomb_break{$chr};
+	if (defined($count_recomb_break{$chr})) {
+	        print OUT $count_recomb_break{$chr};
+		$sum+=$count_recomb_break{$chr};
+	}
+	else {
+	        print OUT "0";
+	}
 }       
 print OUT "\t$sum\n";
 
@@ -199,6 +208,7 @@ sub read_chrsizes {
 sub read_counts {
 	my ($file) = @_;
         open FILE, $file or die "cannot open $file\n";
+	my $count = 0;
         while (<FILE>) {
 		my @a = split " ";
                 my $chr = $a[0];
@@ -206,29 +216,35 @@ sub read_counts {
 
 		if (defined($MARKER_A1{$chr}{$pos})) {
 			my $base;
-	                if ($FILTERED_BASE_CALLS == 0) {
-        	                $base = 3;
+	                if ($REPEAT_FILTERED_BASE_CALLS == 0) {
+        	                $base = 5-1;
                 	}
 	                else {
-        	                $base = ;
+        	                $base = 27-1;
                 	}
 
                 	$MARKER_C1{$chr}{$pos} = $a[$base + $ALLELE{$MARKER_A1{$chr}{$pos}}];
                 	$MARKER_C2{$chr}{$pos} = $a[$base + $ALLELE{$MARKER_A2{$chr}{$pos}}];
+			$count++;
 		}
 	}
+	print STDERR "Counted alleles at markers: $count\n";
 }
 
 sub read_marker {
 	my ($file) = @_;
 	open FILE, $file or die "cannot open $file\n";
+	my $count = 0;
 	while (<FILE>) {
 		my @a = split " ";
-		my $chr = $a[0]; 
-		my $pos = $a[1];
+		my $chr = $a[1]; 
+		my $pos = $a[2];
 
-		$MARKER_A1{$chr}{$pos} = $a[2];
-		$MARKER_A2{$chr}{$pos} = $a[3];
+		$MARKER_A1{$chr}{$pos} = $a[3];
+		$MARKER_A2{$chr}{$pos} = $a[4];
+		
+		$count++;
 	}
+	print STDERR "Found markers: $count\n";
 }
  

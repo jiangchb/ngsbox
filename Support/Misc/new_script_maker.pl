@@ -36,7 +36,7 @@ if (1) {
 
 print STDOUT 
 
-my \$usage = \"\$0 file\\n\";
+"my \$usage = \"\$0 file\\n\";
 
 open FILE, shift or die \$usage;
 ";

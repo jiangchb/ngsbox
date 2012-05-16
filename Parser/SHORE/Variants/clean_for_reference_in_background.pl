@@ -19,35 +19,51 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Parser::FASTA::print_lengths.pl
+#  Module: Parser::SHORE::Variants::clean_for_background.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
-my $usage="$0 fastq\n";
-open FILE, shift or die $usage;
 
-my $seq = "";
-my $flag = 0;
 
-while (<FILE>) {
-	if (substr($_, 0, 1) eq "@") {
-		print length($seq), "\n" if ($seq ne "");
-		$seq = "";
-		$flag = 1;
+my $usage = "\n$0 backgroundRefCalls variants\n\n";
+
+my $bgRef = shift or die $usage;
+my $var = shift or die $usage;
+
+my %BGREF = ();
+my @VAR = ();
+
+my @files = split ",", $bgRef;
+
+foreach my $file (@files) {
+
+	open FILE, $file or die $usage;
+
+	while (my $line = <FILE>) {
+		my @a = split " ", $line;
+		$BGREF{$a[1]."#".$a[2]} = 1;
 	}
-	elsif(substr($_, 0, 1) eq "+") {
-		$flag = 0;
-	}
-	else {
-		if ($flag == 1) {
-			chomp();
-			$seq.=$_;
-		}
-	}
+
+	close FILE;
 }
-print length($seq), "\n" if ($seq ne "");
+
+
+open FILE, $var or die $usage;
+
+while (my $line = <FILE>) {
+	my @a = split " ", $line;
+	if (defined($BGREF{$a[1]."#".$a[2]})) {
+	#	my $id = ($a[1] * 100000000) + $a[2];
+		push @VAR, $line;
+	}
+
+}
+
+foreach my $key (@VAR) {
+	print $key;
+}
 
 
 
