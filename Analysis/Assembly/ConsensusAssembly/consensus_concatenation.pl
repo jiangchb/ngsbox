@@ -29,7 +29,7 @@ use warnings;
 
 
 ### User parameters
-my $usage = "$0 quality_reference_file quality_variant_file outfile centromeresfile\n";
+my $usage = "\n$0 quality_reference_file quality_variant_file outfile centromeresfile\n\n";
 my $r_file = shift or die $usage;
 my $v_file = shift or die $usage;
 my $o_file = shift or die $usage;
@@ -46,8 +46,8 @@ open CFILE, $c_file or die "Cannot open file ".$o_file."\n";
 ### Adjustable parameter
 my $min_qual    = 15;
 my $min_freq    = 0.7;
-my $min_support = 2;
-my $min_len     = 10;
+my $min_support = 3;
+my $min_len     = 250;
 
 
 ### Statistics
@@ -69,6 +69,8 @@ while (my $l = <VFILE>) {
 	}
 }
 close VFILE;
+print STDERR "Finished reading variant file\n";
+
 
 ### Read in centromeres
 while (my $l = <CFILE>) {
@@ -78,9 +80,11 @@ while (my $l = <CFILE>) {
 	}
 }
 close CFILE;
+print STDERR "Finished reading centromere file\n";
+
 
 ### Read in quality ref
-my $last_chr = -1;
+my $last_chr = "NA";
 my $last_pos = -1;
 my %CTG = ();
 
@@ -95,7 +99,7 @@ while (my $l = <RFILE>) {
 	if (not defined($CENTRO{$ref_chr."#".$ref_pos})) {
 
 		# Chromosome change
-		if($ref_chr != $last_chr) {
+		if($ref_chr ne $last_chr) {
 			$last_chr = $ref_chr;
 			$last_pos = -1;
 		}
@@ -111,7 +115,7 @@ while (my $l = <RFILE>) {
 		}
 	
 		# Contiguous ref call
-		elsif( ($ref_chr == $last_chr) && ($ref_pos == $last_pos + 1) && ($ref_q >= $min_qual) && ($a[7] >= $min_freq) && ($a[6] >= $min_support) ) {
+		elsif( ($ref_chr eq $last_chr) && ($ref_pos == $last_pos + 1) && ($ref_q >= $min_qual) && ($a[7] >= $min_freq) && ($a[6] >= $min_support) ) {
 			$CTG{$contigs} .= $a[4];
 			$last_pos = $ref_pos;
 		}
@@ -134,7 +138,7 @@ while (my $l = <RFILE>) {
 				# Contig break if gap is not already closed
 				else {
 					# Gap is already closed
-					if( ($ref_chr == $last_chr) && ($ref_pos == $i) && ($ref_q >= $min_qual) && ($a[7] >= $min_freq) && ($a[6] >= $min_support) ) {
+					if( ($ref_chr eq $last_chr) && ($ref_pos == $i) && ($ref_q >= $min_qual) && ($a[7] >= $min_freq) && ($a[6] >= $min_support) ) {
 						$CTG{$contigs} .= $ref_nuc;
 					}
 					# Contig break
@@ -165,6 +169,8 @@ while (my $l = <RFILE>) {
 	}
 }
 close RFILE;
+print STDERR "Finished parsing reference file\n";
+
 
 $contigs = 0;
 foreach my $contig_nr (sort {$a<=>$b} keys %CTG) {
