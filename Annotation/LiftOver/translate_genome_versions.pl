@@ -105,7 +105,7 @@ for (my $i = 0; $i < length($seq); $i++) {
 	if( defined($LIS{$pos_B} ) ) {
 
 		for(my $j = 0; $j < 8869; $j++) {
-			print STDERR "NA\t-\t$pos_B\t$nuc\t$pos_C\t$nuc\tL\n";
+			#print STDERR "NA\t-\t$pos_B\t$nuc\t$pos_C\t$nuc\tL\n";
 			print "NA\t-\t$pos_B\t$nuc\t$pos_C\t$nuc\tL\n";
 			$pos_B++;
 			$pos_C++;

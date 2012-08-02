@@ -26,24 +26,18 @@ use warnings;
 #
 
 
-use Getopt::Long;
 use FindBin;
 use lib $FindBin::Bin;
-
 use Read;
 
-my $blatfile;
-my $referencefile;
-my $readsfile;
-my $weak;
+my $usage = "\n$0 blat_pslx_file\n\n";
+my $blatfile = shift or die $usage;
 my @READS = ();
 
-## Parse command lint
-my %CMD;
-GetCom();
 
 ## Parse blat output
 parse_file($blatfile);
+
 
 ## Parse alignments for HDR alignments
 parse_deletion_alignments();
@@ -76,7 +70,7 @@ sub parse_file {
 		my @c_read_starts = split ",", $e[19];
 		my @c_read_block_seq = split ",", $e[21];
 
-		my $c_targetid = $e[13];
+		my $c_target_id = $e[13];
 		my @c_target_starts = split ",", $e[20];
 		my @c_target_block_seq = split ",", $e[22];
 
@@ -102,38 +96,5 @@ sub parse_file {
 		}
 
 		$read->add_alignment($match, $c_read_length, \@c_read_starts, \@c_read_ends, \@c_read_block_seq, $c_target_id, \@c_target_starts, \@c_target_ends, \@c_target_block_seq);
-
-	}
-
-}
-
-
-sub GetCom {
-
-        my @usage = ("$0 --blat file --reference file --reads file
-
-default:
---weak  percentage fuzzy similariy btw blat alignments      5
-
-\n");
-
-        die(@usage) if (@ARGV == 0);
-        GetOptions(\%CMD, "blat=s", "weak=s", "reference=s", "reads=s");
-
-        die("Please specify blat file\n") unless defined($CMD{blat});
-        die("Please specify reference file\n") unless defined($CMD{reference});
-        die("Please specify read file\n") unless defined($CMD{reads});
-
-        $blatfile = $CMD{blat};
-        $readsfile = $CMD{reads};
-        $referencefile = $CMD{reference};
-
-        if (defined($CMD{weak})) {
-                $weak = $CMD{weak};
-        }
-	else  {
-		$weak = 5;
 	}
 }
-
-

@@ -26,8 +26,8 @@ use warnings;
 #
 
 
-
 package Alignment;
+
 
 ### Constructor
 sub new {
@@ -46,15 +46,14 @@ sub new {
 	bless $self;
 	return $self;
 }
-		
+
+
 sub get_maplist_format {
 	my ($self, $hits) = @_;
 
-	return $self->{target_id}."\t".
-
+	return $self->{target_id}."\t";
 }
 
-sub 
 
 sub init {
 

@@ -28,10 +28,10 @@ use warnings;
 
 use FindBin;
 use lib $FindBin::Bin;
-
 use needle_alignment;
 
 package needle_controller;
+
 
 ### Constructor
 sub new {
@@ -42,6 +42,7 @@ sub new {
 	bless $self;
 	return $self;
 }
+
 
 sub align {
 	my ($self, $chr, $chrstart, $chrend, $read, $dir) = @_;
@@ -68,7 +69,7 @@ sub parse_fasta {
 	my $seq = "";
 
 	open FASTA, $file or die "Cannot open file ".$file."\n";
-	while (my $line = <FILE>) {
+	while (my $line = <FASTA>) {
 		chomp($line);
 		if (substr($line, 0, 1) eq ">") {
 			if ($seq ne "") {

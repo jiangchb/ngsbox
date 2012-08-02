@@ -39,42 +39,42 @@ my $readsfile;
 my $weak;
 my @READS = ();
 
-## Parse command lint
+
+## Parse command line
 my %CMD;
 GetCom();
+
 
 ## Set up needle alignment obj
 my $needle = new needle_controller();
 $needle->init($referencefile, $readsfile);
 
+
 ## Parse blat output
 parse_file($blatfile);
 #remove_weak_alignments($weak); # dangerous for break points
 
+
 ## Parse alignments for HDR alignments
 parse_deletion_alignments();
 
-## Parse break point alignments
-## TODO was will man damit?
 
-##########################################################################################
-
+## Parse deletions
 sub parse_deletion_alignments {
         foreach my $read(@READS) {
-
 		$read->set_deletion_alignment();
-
         }
 }
 
-## remove unreliable alignments
+
+## Remove unreliable alignments
 sub remove_weak_alignments {
 	foreach my $read(@READS) {
 		$read->remove_repetitive_alignments($weak);
 	}
 }
 
-## parse blatoutput to structures
+## Parse blatoutput to structures
 
 sub parse_file {
 
@@ -92,7 +92,7 @@ sub parse_file {
 		my @c_read_starts = split ",", $e[19];
 		my @c_read_block_seq = split ",", $e[21];
 
-		my $c_targetid = $e[13];
+		my $c_target_id = $e[13];
 		my @c_target_starts = split ",", $e[20];
 		my @c_target_block_seq = split ",", $e[22];
 

@@ -19,37 +19,54 @@ use warnings;
 #
 #  -------------------------------------------------------------------------
 #
-#  Module: Analysis::Validation::Compare::get_ecotype_sequence.pl
+#  Module: Parser::FASTA::fasta_oneliner.pl
 #  Purpose:
 #  In:
 #  Out:
 #
 
 
-use lib "$ENV{NGSBOX}/Prediction/Validation/";
-use Genome;
+my $usage = "$0 min_length fastafile\n";
 
-my $usage = "$0 chrfasta snpfile delfile insfile chr begin end\n";
+my $len = shift or die $usage;
+my $in  = shift or die $usage;
 
-my $reffile = shift or die $usage;
-my $snpfile = shift or die $usage;
-my $deletionfile = shift or die $usage;
-my $insertionfile = shift or die $usage;
-my $chr = shift or die $usage;
-my $begin = shift or die $usage;
-my $end = shift or die $usage;
+open IN, $in or die $usage;
 
-my $genome = new Genome();
-$genome->calc_chr_seq($reffile, $snpfile, $deletionfile, $insertionfile);
+my $seq = "";
+my $id  = "";
+my %genome = ();
 
-my $seq = $genome->get_sequence($chr, $begin, $end);
+while (my $line = <IN>) {
+	chomp($line);
 
-print ">", $chr, " ", $begin, " ", $end, "\n";
-for (my $i = 1; $i<=length($seq); $i++) {
-	print substr($seq, $i-1, 1);
-	print "\n" if $i%60 == 0;
+	if (substr($line, 0, 1) eq ">") {
+
+		if ($seq ne "") {
+			$genome{$id} = $seq;
+		}
+		$seq = "";
+		$id = substr($line, 1);
+	}
+	else {
+		$seq .= $line;
+	}
 }
 
+if ($seq ne "") {
+	$genome{$id} = $seq;
+}
 
+### Find homo
+foreach my $id_key ( sort keys %genome) {
 
+	$seq=uc($genome{$id_key});
+
+	while ($seq =~ /(A{$len,}|C{$len,}|G{$len,}|T{$len,})/g) {
+		my $homopolymer_length = length($1);
+		my $beg = length($`);
+		my $end = $beg + $homopolymer_length - 1;
+		print "$id_key\t$beg\t$end\t$1\n";
+	}
+}
 
