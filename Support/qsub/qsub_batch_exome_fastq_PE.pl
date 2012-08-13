@@ -35,6 +35,7 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--firstreadextension \t describes the name of the first read file (e.g. 1.fastq.gz or 1_sequence.txt.gz)\n",
 	   "--secondreadextension \t describes the name of the first read file (e.g. 2.fastq.gz or 2_sequence.txt.gz)\n",
+	   "--enrichment \t which enrichment kit was used? (Agilent: a35s - 35MB standard, a35e - 35MB extended, a50 - 50MB standard, Nimblegene: n50 - 50MB version 3)\n",
 	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
 	   "--help \t\t show help \n";
 }
@@ -48,12 +49,24 @@ my $nameStart = 'NA';
 my $nameLength;
 my $firstreadextension;
 my $secondreadextension;
+my $enrichment;
 my $cpu = 8;
 my $help = 0;
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "help=s" => \$help);
+my %enrichmentkits = ('a35s' => '/users/GD/resource/human/probesets/agilent/35MB_standard/shore_format',
+		      'a35e' => '/users/GD/resource/human/probesets/agilent/35MB_extended/shore_format',
+		      'a50' => '/users/GD/resource/human/probesets/agilent/50MB/shore_format',
+		      'n50' => '/users/GD/resource/human/probesets/nimblegene/v3/Target_Regions/shore_format/');
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $firstreadextension && $secondreadextension && $help == 0) {
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "enrichment=s" => \$enrichment, "help=s" => \$help);
+
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $firstreadextension && $secondreadextension && $enrichment && $help == 0) {
+	usage;
+	exit;
+}
+
+unless(defined($enrichmentkits{$enrichment})) {
+	print "\n###########################\n enrichment method unknown \n###########################\n";
 	usage;
 	exit;
 }
@@ -111,13 +124,15 @@ NAME=$name
 READ1=$read1
 READ2=$read2
 OUTF=$outfolder/$name
-# REF=/users/GD/projects/genome_indices/human/hg19/bwa/hg19.fasta
 REF=/users/GD/resource/human/hg19/bwa/hg19.fasta
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_standard/shore_format
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_extended/shore_format
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/shore_format
-EXOME=/users/GD/resource/human/probesets/agilent/50MB/shore_format
+# EXOME=/users/GD/resource/human/probesets/agilent/35MB_standard/shore_format
+# EXOME=/users/GD/resource/human/probesets/agilent/35MB_extended/shore_format
+# EXOME=/users/GD/resource/human/probesets/agilent/50MB/shore_format
+# EXOME=/users/GD/resource/human/probesets/nimblegene/v3/Target_Regions/shore_format/
+EXOME=$enrichmentkits{$enrichment}
+
 KNOWNINDEL=/users/GD/resource/human/hg19/databases/dbSNP/dbIndel132_20101103.vcf
+KNOWN=/users/GD/resource/human/hg19/databases/dbSNP/dbsnp135_20111104.vcf
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
 GATK=/users/GD/tools/GATK/GATK_src_1.4-15-gcd43f01/dist/GenomeAnalysisTK.jar
 SAMTOOLS=/soft/bin
@@ -370,7 +385,7 @@ fi
 java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -V:SHORE \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf -V:GATK \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf -V:MPILEUP \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/SNP_Intersection/merged.vcf
 
 # Evaluation
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWNINDEL -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt --eval \$OUTF/SNP_Intersection/merged.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt --eval \$OUTF/SNP_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
 perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
@@ -378,7 +393,7 @@ perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_p
 # Evaluate calls on enriched regions
 grep -v \"NOTENRICHED\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.enriched.vcf
 
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWNINDEL -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.enriched.txt --eval \$OUTF/SNP_Intersection/merged.enriched.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.enriched.txt --eval \$OUTF/SNP_Intersection/merged.enriched.vcf -l INFO
 
 
 
@@ -413,7 +428,7 @@ fi
 java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -V:SHORE \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf -V:GATK \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf -V:MPILEUP \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/Indel_Intersection/merged.vcf
 
 # Evaluation
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWNINDEL -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt --eval \$OUTF/Indel_Intersection/merged.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt --eval \$OUTF/Indel_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
 perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
@@ -421,7 +436,7 @@ perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_p
 # Evaluate calls on enriched regions 
 grep -v \"NOTENRICHED\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.enriched.vcf
 
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWNINDEL -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.enriched.txt --eval \$OUTF/Indel_Intersection/merged.enriched.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.enriched.txt --eval \$OUTF/Indel_Intersection/merged.enriched.vcf -l INFO
 
 
 
