@@ -33,10 +33,12 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--namestart \t  start of a substring in the read file name (first letter is numbered 1) \n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--readextension \t describes the name of the read files (e.g. fastq.gz)\n",
+           "--enrichment \t which enrichment kit was used? (Agilent: a35s - 35MB standard, a35e - 35MB extended, a50 - 50MB standard, Nimblegene: n50 - 50MB version 3)\n",
 	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
 	   "--help \t\t show help \n";
 	   
 	   }
+
 
 my $infolder;
 my $outfolder;
@@ -45,12 +47,27 @@ my $max_cov;
 my $nameStart = 'NA';
 my $nameLength;
 my $readextension;
+my $enrichment;
 my $cpu = 8;
 my $help = 0;
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "cpu=i" => \$cpu, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $readextension && $help == 0) {
+my %enrichmentkits = ('a35s' => '/users/GD/resource/human/probesets/agilent/35MB_standard/shore_format',
+		      'a35e' => '/users/GD/resource/human/probesets/agilent/35MB_extended/shore_format',
+		      'a50' => '/users/GD/resource/human/probesets/agilent/50MB/shore_format',
+		      'n50' => '/users/GD/resource/human/probesets/nimblegene/v3/Target_Regions/shore_format/');
+
+
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "readextension=s" => \$readextension, "cpu=i" => \$cpu, "enrichment=s" => \$enrichment, "help=s" => \$help);
+
+
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $readextension && $enrichment && $help == 0) {
+	usage;
+	exit;
+}
+
+unless(defined($enrichmentkits{$enrichment})) {
+	print "\n###########################\n enrichment method unknown \n###########################\n";
 	usage;
 	exit;
 }
@@ -63,7 +80,7 @@ foreach my $file (@files) {
 	my $fileleaf = $filepath[$#filepath];
 
 
-	my $name = substr($fileleaf, $nameStart, $nameLength);
+	my $name = substr($fileleaf, $nameStart - 1, $nameLength);
 
 	if(! -e "$outfolder/$name") {
 		mkdir "$outfolder/$name" or die "Cannot create output directory $outfolder/$name";
@@ -98,27 +115,29 @@ export PATH=/users/GD/tools/annovar/annovar_2011Nov20/:\$PATH
 NAME=$name
 FASTQ=$file
 OUTF=$outfolder/$name
-REF=/users/GD/projects/genome_indices/human/hg19/bwa/hg19.fasta
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_standard/shore_format
-# EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/35MB_extended/shore_format
-EXOME=/users/GD/projects/HumanDisease/ExomeEnrichment/AgilentSureSelect/50MB/shore_format
+REF=/users/GD/resource/human/hg19/bwa/hg19.fasta
+SHOREREF=/users/GD/resource/human/hg19/shore/hg19.fasta.shore
+EXOME=$enrichmentkits{$enrichment}
+KNOWNINDEL=/users/GD/resource/human/hg19/databases/dbSNP/dbIndel132_20101103.vcf
+KNOWN=/users/GD/resource/human/hg19/databases/dbSNP/dbsnp135_20111104.vcf
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
 GATK=/users/GD/tools/GATK/GATK_src_1.4-15-gcd43f01/dist/GenomeAnalysisTK.jar
 SAMTOOLS=/soft/bin
 ANNOVAR=/users/GD/tools/annovar/annovar_2011Nov20
 SHORE=/users/GD/tools/shore/shore
 NGSBOX=/users/GD/tools/ngsbox
-
+RSCRIPT=/soft/bin/Rscript
+ 
 
 ### Align reads with bwa
- \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 3 -o 1 -e 10 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
+ \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 6 -o 1 -e 20 -l 28 -f \$OUTF/\$NAME.sai \$REF \$FASTQ
 
 
 
-### Correct paired end files
+### Create SAM files
 if [ -s \$OUTF/\$NAME.sai ];
 then
-   echo BWA sampe
+   echo BWA samse
    \$BWA samse -r \"\@RG\\tID:\$NAME\\tSM:\$NAME\" -n 10 -f \$OUTF/\$NAME.sam \$REF \$OUTF/\$NAME.sai \$FASTQ
 else
    echo \$NAME.sai
@@ -163,24 +182,26 @@ fi
 
 
 
-### Local Re-alignment
+### Local Re-alignment and 'fake dm'
 if [ -s \$OUTF/\$NAME.sort.bam.bai ];
 then
    echo Local Re-alignment
-   java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --minReadsAtLocus 6 --maxIntervalSize 200
-   java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
+   java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known \$KNOWNINDEL --minReadsAtLocus 6 --maxIntervalSize 200
+   java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.dm.bam -known \$KNOWNINDEL --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
 else
    echo \$NAME.sort.bam.bai not found
    exit
 fi
 
 
+# ---->>>> end of difference
+
 
 ### Base quality recalibration
 if [ -s \$OUTF/\$NAME.realigned.dm.bam ];
 then
    echo Base quality recalibration
-   java -Xmx4g -jar \$GATK -T CountCovariates -nt $cpu --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf
+   java -Xmx4g -jar \$GATK -T CountCovariates -nt $cpu --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites \$KNOWN
    java -Xmx4g -jar \$GATK -T TableRecalibration --default_platform illumina -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -recalFile \$OUTF/recal_data.csv --out \$OUTF/\$NAME.realigned.dm.recalibrated.bam
 else
    echo \$NAME.realigned.dm.bam not found
@@ -190,8 +211,12 @@ fi
 
 
 ### Cleanup
+rm \$OUTF/\$NAME.sam
+rm \$OUTF/\$NAME.bam
 rm \$OUTF/\$NAME.realigned.bam
 rm \$OUTF/\$NAME.realigned.bai
+rm \$OUTF/\$NAME.realigned.dm.bam
+rm \$OUTF/\$NAME.realigned.dm.bam.bai
 
 
 
@@ -230,7 +255,7 @@ fi
 
 ### SHORE: Prepare format map.list
 mkdir \$OUTF/shore
- \$SHORE convert --sort -r \$REF -n 3 -g 1 -e 10 -s Alignment2Maplist \$OUTF/\$NAME.realigned.dm.recalibrated.bam \$OUTF/shore/map.list.gz
+ \$SHORE convert --sort -r \$REF -n 6 -g 1 -e 20 -s Alignment2Maplist \$OUTF/\$NAME.realigned.dm.recalibrated.bam \$OUTF/shore/map.list.gz
 
 if [ ! -s \$OUTF/shore/map.list.gz ];
 then
@@ -286,13 +311,14 @@ grep depleted \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$
 
 
 ### SHORE: Call SNPs and Indels
- \$SHORE qVar -n \$NAME -f /users/GD/projects/genome_indices/human/hg19/shore/hg19.fasta.shore -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E  \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 3 -y -v
+ \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then
    echo shore/Variants/ConsensusAnalysis is empty
    exit
 fi
+
 
 
 ### Clean up
@@ -306,13 +332,13 @@ gzip -9 \$OUTF/shore/Variants/ConsensusAnalysis/reference.shore
 # Filtering
 mkdir \$OUTF/SNP_Intersection
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/GATK.snps.filtered.vcf -B:variant,VCF \$OUTF/GATK.snps.raw.vcf -B:mask,VCF \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"MQ < 30.0 || QUAL < 25.0 || QD < 4.0 || HRun > 9\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/GATK.snps.filtered.vcf --variant \$OUTF/GATK.snps.raw.vcf --mask \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"MQ < 30.0 || QUAL < 25.0 || QD < 4.0 || HRun > 9\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.vcf -B:variant,VCF \$OUTF/MPILEUP.snps.raw.vcf -B:mask,VCF \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"MQ < 30.0 || QUAL < 15.0 || DP < 5 || DP > $max_cov\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.vcf --variant \$OUTF/MPILEUP.snps.raw.vcf --mask \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"MQ < 30.0 || QUAL < 15.0 || DP < 5 || DP > $max_cov\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
 
 perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter.pl \$OUTF/shore/Variants/ConsensusAnalysis/snp.vcf $max_cov > \$OUTF/SHORE.snps.raw.vcf
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/SHORE.snps.filtered.vcf -B:variant,VCF \$OUTF/SHORE.snps.raw.vcf -B:mask,VCF \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"QUAL < 20.0 || DP < 5 || DP > $max_cov\" --filterName CRG
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/SNP_Intersection/SHORE.snps.filtered.vcf --variant \$OUTF/SHORE.snps.raw.vcf --mask \$OUTF/GATK.indel.raw.vcf --clusterWindowSize 10 --filterExpression \"QUAL < 20.0 || DP < 5 || DP > $max_cov\" --filterName CRG
 
 # greping
 grep -v \"CRG\" \$OUTF/SNP_Intersection/GATK.snps.filtered.vcf | grep -v \"SnpCluster\" > \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf
@@ -331,10 +357,10 @@ then
 fi
 
 # Intersecting
-java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -B:SHORE,VCF \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf -B:GATK,VCF \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf -B:MPILEUP,VCF \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/SNP_Intersection/merged.vcf
+java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -V:SHORE \$OUTF/SNP_Intersection/SHORE.snps.filtered.cleaned.vcf -V:GATK \$OUTF/SNP_Intersection/GATK.snps.filtered.cleaned.vcf -V:MPILEUP \$OUTF/SNP_Intersection/MPILEUP.snps.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/SNP_Intersection/merged.vcf
 
 # Evaluation
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt -B:eval,VCF \$OUTF/SNP_Intersection/merged.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt --eval \$OUTF/SNP_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
 perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
@@ -342,7 +368,7 @@ perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_p
 # Evaluate calls on enriched regions
 grep -v \"NOTENRICHED\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.enriched.vcf
 
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbsnp132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.enriched.txt -B:eval,VCF \$OUTF/SNP_Intersection/merged.enriched.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.enriched.txt --eval \$OUTF/SNP_Intersection/merged.enriched.vcf -l INFO
 
 
 
@@ -351,11 +377,11 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/
 # Filtering
 mkdir \$OUTF/Indel_Intersection
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/GATK.indel.filtered.vcf -B:variant,VCF \$OUTF/GATK.indel.raw.vcf --filterExpression \"MQ < 30.0 || QUAL < 20.0 || MQ0 > 5 || QD < 4.0 || HRun > 9\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/GATK.indel.filtered.vcf --variant \$OUTF/GATK.indel.raw.vcf --filterExpression \"MQ < 30.0 || QUAL < 20.0 || MQ0 > 5 || QD < 4.0 || HRun > 9\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.vcf -B:variant,VCF \$OUTF/MPILEUP.indel.raw.vcf --filterExpression \"MQ < 30.0 || QUAL < 10.0 || DP < 5 || DP > $max_cov\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.vcf --variant \$OUTF/MPILEUP.indel.raw.vcf --filterExpression \"MQ < 30.0 || QUAL < 10.0 || DP < 5 || DP > $max_cov\" --filterName CRG --genotypeFilterExpression \"DP < 5 || DP > $max_cov || GQ < 15\" --genotypeFilterName CRGg
 
-java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/SHORE.indel.filtered.vcf -B:variant,VCF \$OUTF/shore/Variants/ConsensusAnalysis/indels.vcf --filterExpression \"QUAL < 2.0 || DP < 4 || DP > $max_cov || RE > 1.3\" --filterName CRG
+java -jar -Xmx4g \$GATK -T VariantFiltration -R \$REF -o \$OUTF/Indel_Intersection/SHORE.indel.filtered.vcf --variant \$OUTF/shore/Variants/ConsensusAnalysis/indels.vcf --filterExpression \"QUAL < 2.0 || DP < 4 || DP > $max_cov || RE > 1.3\" --filterName CRG
 
 # greping
 grep -v \"CRG\" \$OUTF/Indel_Intersection/GATK.indel.filtered.vcf > \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf
@@ -363,21 +389,21 @@ grep -v \"CRG\" \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.vcf > \$OUTF/In
 grep  -v \"CRG\" \$OUTF/Indel_Intersection/SHORE.indel.filtered.vcf | grep -v \"SHOREFILTER\" > \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf
 
 # Correct sample names in VFC files
-# sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-GATK/\" \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf
-# sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-MPILEUP/\" \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf
-# sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-SHORE/\" \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf
+sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-GATK/\" \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf
+sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-MPILEUP/\" \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf
+sed -i -e \"s/FORMAT\\t\$NAME/FORMAT\\t\$NAME-SHORE/\" \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf
 
 if [[ ! ( -s \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf && -s \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf && -s \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf ) ]];
 then
    echo GATK.indel.filtered.cleaned.vcf or MPILEUP.indel.filtered.cleaned.vcf or SHORE.indel.filtered.cleaned.vcf not found
    exit
 fi
-
+ 
 # Intersecting
-java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -B:SHORE,VCF \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf -B:GATK,VCF \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf -B:MPILEUP,VCF \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/Indel_Intersection/merged.vcf
+java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORITIZE -V:SHORE \$OUTF/Indel_Intersection/SHORE.indel.filtered.cleaned.vcf -V:GATK \$OUTF/Indel_Intersection/GATK.indel.filtered.cleaned.vcf -V:MPILEUP \$OUTF/Indel_Intersection/MPILEUP.indel.filtered.cleaned.vcf -priority GATK,MPILEUP,SHORE -o \$OUTF/Indel_Intersection/merged.vcf
 
 # Evaluation
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt -B:eval,VCF \$OUTF/Indel_Intersection/merged.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt --eval \$OUTF/Indel_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
 perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
@@ -385,7 +411,7 @@ perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_p
 # Evaluate calls on enriched regions 
 grep -v \"NOTENRICHED\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.enriched.vcf
 
-java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/genome_indices/human/hg19/dbSNP/dbIndel132_20101103.vcf -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.enriched.txt -B:eval,VCF \$OUTF/Indel_Intersection/merged.enriched.vcf -l INFO
+java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.enriched.txt --eval \$OUTF/Indel_Intersection/merged.enriched.vcf -l INFO
 
 
 
@@ -393,17 +419,15 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF -B:dbsnp,VCF /users/GD/projects/
 ### Annotate SNPs with ANNOVAR: Intersection, all three tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarIntersection
 egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
-\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann \$ANNOVAR/hg19/
-
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
-mkdir \$OUTF/SNP_Intersection/AnnovarUnion
+mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
 egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
-\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann \$ANNOVAR/hg19/
-
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
@@ -413,12 +437,19 @@ mkdir \$OUTF/SNP_Intersection/AnnovarUnion
 
 
 
-### Annotate Indels with ANNOVAR
-mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
-egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
-\$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
-\$ANNOVAR/custom_summarize_annovar.pl -buildver hg19 -outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann \$ANNOVAR/hg19/
+### Annotate Indels with ANNOVAR: Intersection
+mkdir \$OUTF/Indel_Intersection/AnnovarIntersection
+egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarIntersection/sum \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
+
+### Annotate Indels with ANNOVAR: Partial Union, must include SHORE or at least two tools
+mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
+# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
+ \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate Indels with ANNOVAR: Union, indels predicted by any tool

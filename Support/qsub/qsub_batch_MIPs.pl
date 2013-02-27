@@ -35,7 +35,7 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--firstreadextension \t describes the name of the first read file (e.g. 1.fastq.gz or 1_sequence.txt.gz)\n",
 	   "--secondreadextension \t describes the name of the first read file (e.g. 2.fastq.gz or 2_sequence.txt.gz)\n",
-	   "--enrichment \t which enrichment kit was used? (Agilent: a35s - 35MB standard, a35e - 35MB extended, a50 - 50MB standard, Nimblegene: n50 - 50MB version 3)\n",
+	   "--enrichment \t specify MIPs enrichment region file\n",
 	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
 	   "--help \t\t show help \n";
 }
@@ -53,10 +53,6 @@ my $enrichment;
 my $cpu = 8;
 my $help = 0;
 
-my %enrichmentkits = ('a35s' => '/users/GD/resource/human/probesets/agilent/35MB_standard/shore_format',
-		      'a35e' => '/users/GD/resource/human/probesets/agilent/35MB_extended/shore_format',
-		      'a50' => '/users/GD/resource/human/probesets/agilent/50MB/shore_format',
-		      'n50' => '/users/GD/resource/human/probesets/nimblegene/v3/Target_Regions/shore_format/');
 
 GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "enrichment=s" => \$enrichment, "help=s" => \$help);
 
@@ -65,11 +61,6 @@ unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' &
 	exit;
 }
 
-unless(defined($enrichmentkits{$enrichment})) {
-	print "\n###########################\n enrichment method unknown \n###########################\n";
-	usage;
-	exit;
-}
 
 my @files = glob($infolder . "/*$firstreadextension");
 
@@ -114,7 +105,6 @@ foreach my $read1 (@files) {
 #\$ -o $outfolder/$name/
 
 
-source /users/so/sossowski/.bashrc
 export TMPDIR=/users/GD/projects/HumanDisease/tmp
 export _JAVA_OPTIONS=-Djava.io.tmpdir=/users/GD/projects/HumanDisease/tmp
 export PATH=/users/GD/tools/annovar/annovar_2011Nov20/:\$PATH
@@ -126,7 +116,7 @@ READ2=$read2
 OUTF=$outfolder/$name
 REF=/users/GD/resource/human/hg19/bwa/hg19.fasta
 SHOREREF=/users/GD/resource/human/hg19/shore/hg19.fasta.shore
-EXOME=$enrichmentkits{$enrichment}
+EXOME=$enrichment
 KNOWNINDEL=/users/GD/resource/human/hg19/databases/dbSNP/dbIndel132_20101103.vcf
 KNOWN=/users/GD/resource/human/hg19/databases/dbSNP/dbsnp135_20111104.vcf
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
@@ -136,21 +126,43 @@ ANNOVAR=/users/GD/tools/annovar/annovar_2011Nov20
 SHORE=/users/GD/tools/shore/shore
 NGSBOX=/users/GD/tools/ngsbox
 RSCRIPT=/soft/bin/Rscript
+FLASH=/users/GD/tools/Flash/FLASH/flash
+FASTQC=/users/GD/tools/FastQC/FastQC-0.10.1/fastqc
+
+
+
+### Preprocessing MIPs reads
+perl \$NGSBOX/Parser/FASTQ/trim_length.pl 1 150 100 \$READ1 > \$OUTF/\$NAME.r1.fastq
+perl \$NGSBOX/Parser/FASTQ/trim_length.pl 1 150 100 \$READ2 > \$OUTF/\$NAME.r2.fastq
+
+\$FLASH \$OUTF/\$NAME.r1.fastq \$OUTF/\$NAME.r2.fastq -m 148 -M 148 -x 0.1
+
+perl \$NGSBOX/Parser/FASTQ/trim_length.pl  1 152 152 \$OUTF/out.extendedFrags.fastq > \$OUTF/\$NAME.fastq
+
+gzip -9 \$OUTF/\$NAME.fastq
+
+\$FASTQC \$OUTF/\$NAME.fastq.gz
+
+rm \$OUTF/\$NAME.r1.fastq
+rm \$OUTF/\$NAME.r2.fastq
+rm \$OUTF/out.extendedFrags.fastq
+rm \$OUTF/out.notCombined_1.fastq
+rm \$OUTF/out.notCombined_2.fastq
+
 
 
 ### Align reads with bwa
- \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 6 -o 1 -e 20 -l 28 -f \$OUTF/\$NAME.r1.sai \$REF \$READ1
- \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 6 -o 1 -e 20 -l 28 -f \$OUTF/\$NAME.r2.sai \$REF \$READ2
+ \$BWA aln -k 2 -i 5 -q -1 -t $cpu -R 0 -n 6 -o 1 -e 20 -f \$OUTF/\$NAME.sai \$REF \$OUTF/\$NAME.fastq.gz
 
 
 
-### Correct paired end files
-if [[ ( -s \$OUTF/\$NAME.r1.sai && -s \$OUTF/\$NAME.r2.sai ) ]];
+### Create SAM files
+if [ -s \$OUTF/\$NAME.sai ];
 then
-   echo BWA sampe
-   \$BWA sampe -r \"\@RG\\tID:\$NAME\\tSM:\$NAME\" -a 500 -o 100000 -n 10 -N 10 -f \$OUTF/\$NAME.sam \$REF \$OUTF/\$NAME.r1.sai \$OUTF/\$NAME.r2.sai \$READ1 \$READ2
+   echo BWA samse
+   \$BWA samse -r \"\@RG\\tID:\$NAME\\tSM:\$NAME\" -n 3 -f \$OUTF/\$NAME.sam \$REF \$OUTF/\$NAME.sai \$OUTF/\$NAME.fastq.gz
 else
-   echo \$NAME.r1.sai or \$NAME.r2.sai not found
+   echo \$NAME.sai
    exit
 fi
 
@@ -193,62 +205,32 @@ fi
 
 
 ### Local Re-alignment
-if [ -s \$OUTF/\$NAME.sort.bam.bai ];
-then
-   echo Local Re-alignment
-   java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known \$KNOWNINDEL --minReadsAtLocus 6 --maxIntervalSize 200
-   java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known \$KNOWNINDEL --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
-else
-   echo \$NAME.sort.bam.bai not found
-   exit
-fi
-
-
-
-### Duplicate marking
-if [ -s \$OUTF/\$NAME.realigned.bam ];
-then
-   echo Duplicate marking
-   java -Xmx4g -jar /users/GD/tools/picard/picard-tools-1.40/MarkDuplicates.jar INPUT=\$OUTF/\$NAME.realigned.bam OUTPUT=\$OUTF/\$NAME.realigned.dm.bam METRICS_FILE=\$OUTF/duplication_metrics.txt ASSUME_SORTED=true VALIDATION_STRINGENCY=LENIENT
-   \$SAMTOOLS/samtools index \$OUTF/\$NAME.realigned.dm.bam
-else
-   echo \$NAME.realigned.bam not found
-   exit
-fi
-
-
-
-### Base quality recalibration
-if [ -s \$OUTF/\$NAME.realigned.dm.bam ];
-then
-   echo Base quality recalibration
-   java -Xmx4g -jar \$GATK -T CountCovariates -nt $cpu --default_platform illumina -cov ReadGroupCovariate -cov QualityScoreCovariate -cov CycleCovariate -cov DinucCovariate -recalFile \$OUTF/recal_data.csv -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -knownSites \$KNOWN
-   java -Xmx4g -jar \$GATK -T TableRecalibration --default_platform illumina -R \$REF -I \$OUTF/\$NAME.realigned.dm.bam -recalFile \$OUTF/recal_data.csv --out \$OUTF/\$NAME.realigned.dm.recalibrated.bam
-else
-   echo \$NAME.realigned.dm.bam not found
-   exit
-fi
+# if [ -s \$OUTF/\$NAME.sort.bam.bai ];
+# then
+#    echo Local Re-alignment
+#    java -Xmx4g -jar \$GATK -T RealignerTargetCreator -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/\$NAME.intervals -known \$KNOWNINDEL --minReadsAtLocus 6 --maxIntervalSize 200
+#    java -Xmx4g -jar \$GATK -T IndelRealigner -R \$REF -I \$OUTF/\$NAME.sort.bam -targetIntervals \$OUTF/\$NAME.intervals -o \$OUTF/\$NAME.realigned.bam -known \$KNOWNINDEL --maxReadsForRealignment 10000 --consensusDeterminationModel USE_SW
+# else
+#    echo \$NAME.sort.bam.bai not found
+#    exit
+# fi
 
 
 
 ### Cleanup
 rm \$OUTF/\$NAME.sam
 rm \$OUTF/\$NAME.bam
-rm \$OUTF/\$NAME.realigned.bam
-rm \$OUTF/\$NAME.realigned.bai
-rm \$OUTF/\$NAME.realigned.dm.bam
-rm \$OUTF/\$NAME.realigned.dm.bam.bai
 
 
 
 ### GATK: Call SNPs and Indels with the GATK Unified Genotyper
-if [ -s \$OUTF/\$NAME.realigned.dm.recalibrated.bam ];
+if [ -s \$OUTF/\$NAME.sort.bam ];
 then
    echo GATK: Call SNPs and Indels with the GATK Unified Genotyper
-   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
-   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.realigned.dm.recalibrated.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/GATK.snps.raw.vcf -glm SNP
+   java -Xmx4g -jar \$GATK -T UnifiedGenotyper -nt $cpu -R \$REF -I \$OUTF/\$NAME.sort.bam -o \$OUTF/GATK.indel.raw.vcf -glm INDEL
 else
-   echo \$NAME.realigned.dm.recalibrated.bam not found
+   echo \$NAME.sort.bam not found
    exit
 fi
 
@@ -261,8 +243,8 @@ fi
 
 
 ### MPILEUP: Call SNPs and Indels
- \$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.realigned.dm.recalibrated.bam | \$SAMTOOLS/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
- \$SAMTOOLS/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/vcfutils.pl varFilter -d5 -D$max_cov -W 20 > \$OUTF/MPILEUP.variant.raw.vcf
+ \$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.sort.bam | \$SAMTOOLS/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
+ \$SAMTOOLS/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/vcfutils.pl varFilter -d5 -D$max_cov -W 10 -1 0.0 -2 0.0 -3 0.0 -4 0.0 > \$OUTF/MPILEUP.variant.raw.vcf
 egrep \"INDEL|#\" \$OUTF/MPILEUP.variant.raw.vcf > \$OUTF/MPILEUP.indel.raw.vcf
 grep -v INDEL \$OUTF/MPILEUP.variant.raw.vcf > \$OUTF/MPILEUP.snps.raw.vcf
 
@@ -276,7 +258,7 @@ fi
 
 ### SHORE: Prepare format map.list
 mkdir \$OUTF/shore
- \$SHORE convert --sort -r \$REF -n 6 -g 1 -e 20 -s Alignment2Maplist \$OUTF/\$NAME.realigned.dm.recalibrated.bam \$OUTF/shore/map.list.gz
+ \$SHORE convert --sort -r \$REF -n 6 -g 1 -e 20 -s Alignment2Maplist \$OUTF/\$NAME.sort.bam \$OUTF/shore/map.list.gz
 
 if [ ! -s \$OUTF/shore/map.list.gz ];
 then
@@ -292,47 +274,21 @@ fi
 
 
 ### SHORE: Compute enrichment
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus200 -f \$EXOME/Exome_Array_plus200.bed -H 1,1 -k
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus150 -f \$EXOME/Exome_Array_plus150.bed -H 1,1 -k
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus100 -f \$EXOME/Exome_Array_plus100.bed -H 1,1 -k
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus50 -f \$EXOME/Exome_Array_plus50.bed -H 1,1 -k
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_SureSelect_plus0 -f \$EXOME/Exome_Array_plus0.bed -H 1,1 -k
-
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_Enrichment -f \$EXOME -H 1,1 -k
 
 
 ### SHORE: Enrichment plots
-grep enriched \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus150/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus150/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus150/exome_count_depleted.txt
-### plot data
-\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus150/
-
-grep enriched \$OUTF/shore/Count_SureSelect_plus0/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus0/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_SureSelect_plus0/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus0/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus0/exome_count_depleted.txt
-### plot data
-\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus0/
-
-grep enriched \$OUTF/shore/Count_SureSelect_plus50/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus50/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_SureSelect_plus50/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus50/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus50/exome_count_depleted.txt
-### plot data
-\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus50/
-
-grep enriched \$OUTF/shore/Count_SureSelect_plus100/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus100/meancov.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_SureSelect_plus100/readcount.txt | cut -f5 > \$OUTF/shore/Count_SureSelect_plus100/exome_count_depleted.txt
-### plot data
-\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_SureSelect_plus100/
+grep enriched \$OUTF/shore/Count_Enrichment/meancov.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_enriched.txt
+grep depleted \$OUTF/shore/Count_Enrichment/meancov.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_depleted.txt
+grep enriched \$OUTF/shore/Count_Enrichment/readcount.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_count_enriched.txt
+grep depleted \$OUTF/shore/Count_Enrichment/readcount.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_count_depleted.txt
+\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_Enrichment/
 
 
 
 ### SHORE: Call SNPs and Indels
- \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
+# \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
+ \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -t -c 4 -d 4 -C $max_cov --r 3 -q 20 -Q 15 -a 0.25 -b 6 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then
@@ -343,7 +299,7 @@ fi
 
 
 ### Clean up
-rm -r \$OUTF/shore/Variants/ConsensusAnalysis/supplementary_data
+# rm -r \$OUTF/shore/Variants/ConsensusAnalysis/supplementary_data
 gzip -9 \$OUTF/shore/Variants/ConsensusAnalysis/reference.shore
 
 
@@ -384,7 +340,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt --eval \$OUTF/SNP_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions
 grep -v \"NOTENRICHED\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.enriched.vcf
@@ -427,7 +383,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt --eval \$OUTF/Indel_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME/Exome_Array_plus150.bed \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions 
 grep -v \"NOTENRICHED\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.enriched.vcf
@@ -439,43 +395,43 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"
 
 ### Annotate SNPs with ANNOVAR: Intersection, all three tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarIntersection
-egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
+egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
-egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarUnion
- \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 
 ### Annotate Indels with ANNOVAR: Intersection
 mkdir \$OUTF/Indel_Intersection/AnnovarIntersection
-egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarIntersection/sum \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate Indels with ANNOVAR: Partial Union, must include SHORE or at least two tools
 mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
-# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
-egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate Indels with ANNOVAR: Union, indels predicted by any tool
 mkdir \$OUTF/Indel_Intersection/AnnovarUnion
- \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
