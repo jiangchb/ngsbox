@@ -35,7 +35,8 @@ sub usage { print "\n$0 \n usage:\n",
 	   "--namelength \t length of the part of the filenames which should be taken as sample (and folder) name \n",
 	   "--firstreadextension \t describes the name of the first read file (e.g. 1.fastq.gz or 1_sequence.txt.gz)\n",
 	   "--secondreadextension \t describes the name of the first read file (e.g. 2.fastq.gz or 2_sequence.txt.gz)\n",
-	   "--enrichment \t specify MIPs enrichment region file\n",
+           "--oligos \t specify MIPs enrichment oligos file\n",
+	   "--regions \t specify MIPs enrichment regions file\n",
 	   "--cpu \t number of cpu cores to be used (applicable only for a few steps) [default = 8]\n",
 	   "--help \t\t show help \n";
 }
@@ -49,14 +50,15 @@ my $nameStart = 'NA';
 my $nameLength;
 my $firstreadextension;
 my $secondreadextension;
-my $enrichment;
+my $enrichment_oligo;
+my $enrichment_region;
 my $cpu = 8;
 my $help = 0;
 
 
-GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "enrichment=s" => \$enrichment, "help=s" => \$help);
+GetOptions("infolder=s" => \$infolder, "outfolder=s" => \$outfolder, "qsubname=s" => \$qsub_name, "max_coverage=i" => \$max_cov, "nameStart=s" => \$nameStart, "nameLength=s" => \$nameLength, "firstreadextension=s" => \$firstreadextension, "secondreadextension=s" => \$secondreadextension, "cpu=i" => \$cpu, "oligos=s" => \$enrichment_oligo, "regions=s" => \$enrichment_region, "help=s" => \$help);
 
-unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $firstreadextension && $secondreadextension && $enrichment && $help == 0) {
+unless($infolder && $outfolder && $qsub_name && $max_cov && $nameStart ne 'NA' && $nameLength && $firstreadextension && $secondreadextension && $enrichment_oligo && $enrichment_region && $help == 0) {
 	usage;
 	exit;
 }
@@ -116,7 +118,8 @@ READ2=$read2
 OUTF=$outfolder/$name
 REF=/users/GD/resource/human/hg19/bwa/hg19.fasta
 SHOREREF=/users/GD/resource/human/hg19/shore/hg19.fasta.shore
-EXOME=$enrichment
+OLIGO=$enrichment_oligo
+REGION=$enrichment_region
 KNOWNINDEL=/users/GD/resource/human/hg19/databases/dbSNP/dbIndel132_20101103.vcf
 KNOWN=/users/GD/resource/human/hg19/databases/dbSNP/dbsnp135_20111104.vcf
 BWA=/users/GD/tools/bwa/bwa-0.5.10/bwa
@@ -274,21 +277,13 @@ fi
 
 
 ### SHORE: Compute enrichment
- \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_Enrichment -f \$EXOME -H 1,1 -k
-
-
-### SHORE: Enrichment plots
-grep enriched \$OUTF/shore/Count_Enrichment/meancov.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_enriched.txt
-grep depleted \$OUTF/shore/Count_Enrichment/meancov.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_depleted.txt
-grep enriched \$OUTF/shore/Count_Enrichment/readcount.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_count_enriched.txt
-grep depleted \$OUTF/shore/Count_Enrichment/readcount.txt | cut -f5 > \$OUTF/shore/Count_Enrichment/exome_count_depleted.txt
-\$RSCRIPT \$NGSBOX/Statistics/R_examples/exome_enrichment_stats.R \$OUTF/shore/Count_Enrichment/
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_enrichment_oligo -f \$OLIGO -H 1,1 -k
+ \$SHORE count -m \$OUTF/shore/map.list.gz -o \$OUTF/shore/Count_enrichment_region -f \$REGION -H 1,1 -k
 
 
 
 ### SHORE: Call SNPs and Indels
-# \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -E \$OUTF/shore/Count_SureSelect_plus150/meancov.txt -e -c 4 -d 4 -C $max_cov -r 3 -q 10 -Q 15 -a 0.25 -b 6 -y -v
- \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -t -c 4 -d 4 -C $max_cov --r 3 -q 20 -Q 15 -a 0.25 -b 6 -y -v
+ \$SHORE qVar -n \$NAME -f \$SHOREREF -o \$OUTF/shore/Variants -i \$OUTF/shore/map.list.gz -s /users/GD/tools/shore/scoring_matrices/scoring_matrix_het.txt -t -c 4 -d 4 -C $max_cov -r 3 -q 20 -Q 15 -a 0.25 -b 6 -y -v
 
 if [ ! -s \$OUTF/shore/Variants/ConsensusAnalysis ];
 then
@@ -340,7 +335,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/SNP_Intersection/report.all.txt --eval \$OUTF/SNP_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$REGION \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions
 grep -v \"NOTENRICHED\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.enriched.vcf
@@ -383,7 +378,7 @@ java -jar -Xmx4g \$GATK -T CombineVariants -R \$REF -genotypeMergeOptions PRIORI
 java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"Intersection\"' -selectName Intersection -select 'set==\"SHORE\"' -selectName SHORE -select 'set==\"MPILEUP\"' -selectName MPILEUP -select 'set==\"GATK\"' -selectName GATK -select 'set==\"GATK-MPILEUP\"' -selectName GATK_MPILEUP -select 'set==\"GATK-SHORE\"' -selectName GATK_SHORE -select 'set==\"MPILEUP-SHORE\"' -selectName MPILEUP_SHORE -o \$OUTF/Indel_Intersection/report.all.txt --eval \$OUTF/Indel_Intersection/merged.vcf -l INFO
 
 # Annotate Enrichment
-perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$EXOME \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
+perl \$NGSBOX/Parser/VCF/vcf_filter/vcf_filter_enriched.pl \$REGION \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.all.vcf
 
 # Evaluate calls on enriched regions 
 grep -v \"NOTENRICHED\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.enriched.vcf
@@ -395,43 +390,43 @@ java -jar -Xmx4g \$GATK -T VariantEval -R \$REF --dbsnp \$KNOWN -select 'set==\"
 
 ### Annotate SNPs with ANNOVAR: Intersection, all three tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarIntersection
-egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
+egrep \"Intersection|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.intersection.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.intersection.vcf > \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarIntersection/sum \$OUTF/SNP_Intersection/AnnovarIntersection/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Partial union, at least 2 tools predict SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarPartialUnion
-egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|GATK-MPILEUP|#\" \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.union.vcf > \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarPartialUnion/sum \$OUTF/SNP_Intersection/AnnovarPartialUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate SNPs with ANNOVAR: Union, any tool predicts SNP
 mkdir \$OUTF/SNP_Intersection/AnnovarUnion
- \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/SNP_Intersection/merged.all.vcf > \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/SNP_Intersection/AnnovarUnion/sum \$OUTF/SNP_Intersection/AnnovarUnion/snps.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 
 ### Annotate Indels with ANNOVAR: Intersection
 mkdir \$OUTF/Indel_Intersection/AnnovarIntersection
-egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarIntersection/sum \$OUTF/Indel_Intersection/AnnovarIntersection/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate Indels with ANNOVAR: Partial Union, must include SHORE or at least two tools
 mkdir \$OUTF/Indel_Intersection/AnnovarUnionShore
-# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
-egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+# egrep \"Intersection|GATK-SHORE|MPILEUP-SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
+egrep \"Intersection|GATK-MPILEUP|SHORE|#\" \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/merged.union.vcf
  \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.union.vcf > \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnionShore/sum \$OUTF/Indel_Intersection/AnnovarUnionShore/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
 ### Annotate Indels with ANNOVAR: Union, indels predicted by any tool
 mkdir \$OUTF/Indel_Intersection/AnnovarUnion
- \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
+ \$ANNOVAR/convert2annovar.pl -format vcf4 \$OUTF/Indel_Intersection/merged.all.vcf > \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann
  \$ANNOVAR/custom_summarize_annovar.pl --buildver hg19 --outfile \$OUTF/Indel_Intersection/AnnovarUnion/sum \$OUTF/Indel_Intersection/AnnovarUnion/indels.ann --ver1000g 1000g2011may \$ANNOVAR/hg19/
 
 
