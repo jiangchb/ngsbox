@@ -246,6 +246,7 @@ fi
 
 
 ### MPILEUP: Call SNPs and Indels
+ \$SAMTOOLS/samtools mpileup -d 999999 -f \$REF \$OUTF/\$NAME.sort.bam > \$OUTF/\$NAME.pileup
  \$SAMTOOLS/samtools mpileup -uf \$REF \$OUTF/\$NAME.sort.bam | \$SAMTOOLS/bcftools view -bcg - > \$OUTF/MPILEUP.variant.raw.bcf
  \$SAMTOOLS/bcftools view \$OUTF/MPILEUP.variant.raw.bcf | \$SAMTOOLS/vcfutils.pl varFilter -d5 -D$max_cov -W 10 -1 0.0 -2 0.0 -3 0.0 -4 0.0 > \$OUTF/MPILEUP.variant.raw.vcf
 egrep \"INDEL|#\" \$OUTF/MPILEUP.variant.raw.vcf > \$OUTF/MPILEUP.indel.raw.vcf
