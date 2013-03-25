@@ -138,13 +138,13 @@ FASTQC=/users/GD/tools/FastQC/FastQC-0.10.1/fastqc
 perl \$NGSBOX/Parser/FASTQ/trim_length.pl 1 150 100 \$READ1 > \$OUTF/\$NAME.r1.fastq
 perl \$NGSBOX/Parser/FASTQ/trim_length.pl 1 150 100 \$READ2 > \$OUTF/\$NAME.r2.fastq
 
-\$FLASH \$OUTF/\$NAME.r1.fastq \$OUTF/\$NAME.r2.fastq -m 148 -M 148 -x 0.1
+\$FLASH \$OUTF/\$NAME.r1.fastq \$OUTF/\$NAME.r2.fastq -o \$OUTF/out -m 148 -M 148 -x 0.1
 
 perl \$NGSBOX/Parser/FASTQ/trim_length.pl  1 152 152 \$OUTF/out.extendedFrags.fastq > \$OUTF/\$NAME.fastq
 
 gzip -9 \$OUTF/\$NAME.fastq
 
-\$FASTQC \$OUTF/\$NAME.fastq.gz
+\$FASTQC -o \$OUTF \$OUTF/\$NAME.fastq.gz
 
 rm \$OUTF/\$NAME.r1.fastq
 rm \$OUTF/\$NAME.r2.fastq
