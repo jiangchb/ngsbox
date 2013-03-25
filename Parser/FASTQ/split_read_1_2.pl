@@ -27,13 +27,14 @@ use warnings;
 
 
 
-my $usage  = "$0 file\n";
+my $usage  = "$0 file prefix\n";
 my $file   = shift or die $usage;
+my $prefix = shift or die $usage;
 
 open F1, $file or die "Cannot open input read 1 file\n";
 
-open R1, ">$file.r1" or die "Cannot open output read 1 file\n";
-open R2, ">$file.r2" or die "Cannot open output read 2 file\n";
+open R1, ">$prefix.r1" or die "Cannot open output read 1 file\n";
+open R2, ">$prefix.r2" or die "Cannot open output read 2 file\n";
 
 while( <F1> ) {
 	my $sh1   = $_;

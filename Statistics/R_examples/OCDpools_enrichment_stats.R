@@ -20,12 +20,12 @@ pdf(file="SureSelect_Enrichment_Statistics.pdf", width=10, height=12)
 layoutmat<-matrix(data=c(1,2), nrow=2, ncol=1, byrow=TRUE)
 layout(layoutmat)
 
-hist(round(depleted$V1), xlim=c(0,300), ylim=c(0,4000), breaks=1*0:4000, col = "red", xlab = "Mean coverage", main = paste(
+hist(round(depleted$V1), xlim=c(0,150), ylim=c(0,2000), breaks=1*0:4000, col = "red", xlab = "Mean coverage", main = paste(
         "SureSelect depleteded regions\n mean coverage: ",
         round(mean(depleted$V1), digits = 2) )
 )
 
-hist(round(enriched$V1), xlim=c(0,3000), ylim=c(0,40), breaks=1*0:30000, col = "blue", xlab = "Mean coverage", main = paste(
+hist(round(enriched$V1), xlim=c(0,1000), ylim=c(0,40), breaks=1*0:1500, col = "blue", xlab = "Mean coverage", main = paste(
         "SureSelect enriched regions",
         "\n mean coverage: ", round(mean(enriched$V1), digits = 2),
         ", Specificity: ",  enrichment, "%",

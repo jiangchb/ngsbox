@@ -45,8 +45,8 @@ while( <BED> ) {
 	#	$regseq = revcomp($regseq);
 	#}
 
-	#print ">" . $a[0] . " | " . $a[1] . " | " . $a[2] . "\n$regseq\n";
-	print $a[0] . "\t" . $a[1] . "\t" . $a[2] . "\t$regseq\n";
+	print ">" . $a[0] . " | " . $a[1] . " | " . $a[2] . "\n$regseq\n";
+	#print $a[0] . "\t" . $a[1] . "\t" . $a[2] . "\t$regseq\n";
 }
 
 exit(0);
