@@ -1,0 +1,1 @@
+Scripts for modifying and analyzing bioinformatics related data files. Specifically geared towards high throughput analysis of next generation sequencing data. Provides parsing and conversion tools for common sequence and alignment formats, sequencing statistics and various sequencing analysis tools.
